@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CreditCard, Building2, Banknote, Receipt, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createPaymentPage } from '../lib/cardcom';
+import { addContactNote } from '../lib/crm-api';
 
 interface PaymentOptionsModalProps {
   customer: {
@@ -130,6 +131,19 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
     try {
       // Update all orders status and update stock
       for (const order of orders) {
+        // Get order details with business info
+        const { data: orderDetails, error: orderError } = await supabase
+          .from('customer_orders')
+          .select(`
+            id,
+            total_amount,
+            business_id
+          `)
+          .eq('id', order.id)
+          .single();
+
+        if (orderError) throw orderError;
+
         // Update order status
         const { error: updateError } = await supabase
           .from('customer_orders')
@@ -142,6 +156,36 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
           .eq('id', order.id);
 
         if (updateError) throw updateError;
+
+        // Get order items
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select(`
+            quantity,
+            products (
+              name
+            )
+          `)
+          .eq('order_id', order.id);
+
+        // Create note for CRM
+        const itemsList = orderItems?.map(item => 
+          `${item.products.name} (${item.quantity})`
+        ).join(', ');
+
+        const noteBody = `✅ תשלום התקבל\n` +
+                        `סכום: ₪${orderDetails.total_amount}\n` +
+                        `פריטים: ${itemsList}\n` +
+                        `מספר הזמנה: ${order.id}\n` +
+                        `אמצעי תשלום: ${paymentMethod}\n` +
+                        `אסמכתא: ${paymentReference}`;
+
+        // Send note to CRM
+        await addContactNote({
+          contactId: customer.contact_id,
+          body: noteBody,
+          businessId: orderDetails.business_id
+        });
 
         // Update stock for this order
         await updateStock(order.id);

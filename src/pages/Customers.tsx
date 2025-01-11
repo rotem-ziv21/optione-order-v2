@@ -7,6 +7,7 @@ import CustomerEdit from '../components/CustomerEdit';
 import OrderStatusUpdate from '../components/OrderStatusUpdate';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
+import { useCardcomCallback } from '../hooks/useCardcomCallback';
 
 interface Product {
   id: string;
@@ -44,6 +45,8 @@ interface Customer {
 }
 
 export default function Customers() {
+  useCardcomCallback();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductForm, setShowProductForm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -355,6 +358,64 @@ export default function Customers() {
         </table>
       </div>
 
+      {/* Orders Table */}
+      {selectedCustomer && customerOrders[selectedCustomer.contact_id] && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900">הזמנות של {selectedCustomer.name}</h3>
+          </div>
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  מספר הזמנה
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  תאריך
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  סכום
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  סטטוס
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  פעולות
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {customerOrders[selectedCustomer.contact_id].map((order) => (
+                <tr key={order.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">{order.id}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">
+                      {format(new Date(order.created_at), 'dd/MM/yyyy')}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">₪{order.total_amount.toFixed(2)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">{order.status}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <button
+                      onClick={() => handleStatusUpdate(order.id)}
+                      className="text-blue-600 hover:text-blue-900"
+                    >
+                      עדכון סטטוס
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Modals */}
       {showProductForm && selectedCustomer && (
         <CustomerProductForm
@@ -406,17 +467,9 @@ export default function Customers() {
       {showStatusUpdate && selectedOrder && (
         <OrderStatusUpdate
           orderId={selectedOrder}
-          currentStatus={customerOrders[selectedCustomer?.contact_id || '']
-            .find(order => order.id === selectedOrder)?.status || 'pending'}
-          onClose={() => {
-            setShowStatusUpdate(false);
-            setSelectedOrder(null);
-          }}
-          onUpdate={() => {
-            setShowStatusUpdate(false);
-            setSelectedOrder(null);
-            fetchCustomerOrders();
-          }}
+          businessId={currentBusinessId}
+          onClose={() => setShowStatusUpdate(false)}
+          onUpdate={fetchCustomerOrders}
         />
       )}
     </div>

@@ -1,38 +1,122 @@
 import React, { useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { addContactNote } from '../lib/crm-api';
 
 interface OrderStatusUpdateProps {
   orderId: string;
-  currentStatus: 'pending' | 'completed' | 'cancelled';
+  currentStatus: string;
+  businessId: string;
   onClose: () => void;
   onUpdate: () => void;
 }
 
-export default function OrderStatusUpdate({ orderId, currentStatus, onClose, onUpdate }: OrderStatusUpdateProps) {
-  const [status, setStatus] = useState(currentStatus);
-  const [updating, setUpdating] = useState(false);
-  const [error, setError] = useState('');
+const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, onClose, onUpdate, businessId }) => {
+  console.log('OrderStatusUpdate props:', { orderId, businessId });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUpdating(true);
-    setError('');
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
+
+  const statusOptions = [
+    { value: 'pending', label: 'ממתין' },
+    { value: 'completed', label: 'הושלם' },
+    { value: 'cancelled', label: 'בוטל' },
+    { value: 'paid', label: 'שולם' }
+  ];
+
+  const handleUpdateStatus = async () => {
+    if (!orderId || !status) {
+      console.error('Missing orderId or status');
+      return;
+    }
+    if (!businessId) {
+      console.error('Missing businessId');
+      return;
+    }
 
     try {
+      setLoading(true);
+      console.log('Starting order status update:', {
+        orderId,
+        status,
+        businessId
+      });
+
+      // עדכון סטטוס ההזמנה
       const { error } = await supabase
         .from('customer_orders')
         .update({ status })
         .eq('id', orderId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating order status:', error);
+        throw error;
+      }
+      console.log('Order status updated successfully');
+
+      // אם העדכון הוא למצב 'paid', שלח הערה ל-CRM
+      if (status === 'paid') {
+        console.log('Status is paid, fetching order details...');
+        
+        const { data: order, error: orderError } = await supabase
+          .from('customer_orders')
+          .select(`
+            id,
+            customer_id,
+            total_amount,
+            items (
+              name,
+              quantity
+            )
+          `)
+          .eq('id', orderId)
+          .single();
+
+        if (orderError) {
+          console.error('Error fetching order details:', orderError);
+          throw orderError;
+        }
+        console.log('Order details:', order);
+
+        if (order.customer_id) {
+          console.log('Found customer_id:', order.customer_id);
+          const itemsList = order.items.map((item: any) => `${item.name} (${item.quantity})`).join(', ');
+          
+          const noteBody = `✅ תשלום התקבל\n` +
+                          `סכום: ₪${order.total_amount}\n` +
+                          `פריטים: ${itemsList}\n` +
+                          `מספר הזמנה: ${orderId}`;
+
+          console.log('Sending note to CRM:', {
+            contactId: order.customer_id,
+            body: noteBody,
+            businessId: businessId
+          });
+
+          await addContactNote({
+            contactId: order.customer_id,
+            body: noteBody,
+            businessId: businessId
+          });
+          
+          console.log('Note sent to CRM successfully');
+        } else {
+          console.log('No customer_id found for order');
+        }
+      }
 
       onUpdate();
+      setMessage({ type: 'success', text: 'סטטוס ההזמנה עודכן בהצלחה' });
     } catch (error) {
-      console.error('Error updating order status:', error);
-      setError('שגיאה בעדכון סטטוס ההזמנה');
+      console.error('Error in handleUpdateStatus:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'שגיאה בעדכון סטטוס ההזמנה'
+      });
     } finally {
-      setUpdating(false);
+      setLoading(false);
+      onClose();
     }
   };
 
@@ -46,24 +130,24 @@ export default function OrderStatusUpdate({ orderId, currentStatus, onClose, onU
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleUpdateStatus(); }} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">
               סטטוס
             </label>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as typeof status)}
+              onChange={(e) => setStatus(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
-              <option value="pending">בהמתנה</option>
-              <option value="completed">הושלם</option>
-              <option value="cancelled">בוטל</option>
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
 
-          {error && (
-            <div className="text-red-600 text-sm">{error}</div>
+          {message && (
+            <div className={`text-${message.type === 'success' ? 'green' : 'red'}-600 text-sm`}>{message.text}</div>
           )}
 
           <div className="flex justify-end space-x-3 pt-4">
@@ -76,11 +160,11 @@ export default function OrderStatusUpdate({ orderId, currentStatus, onClose, onU
             </button>
             <button
               type="submit"
-              disabled={updating}
+              disabled={loading}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 disabled:opacity-50"
             >
               <Check className="w-5 h-5" />
-              <span>{updating ? 'מעדכן...' : 'עדכן סטטוס'}</span>
+              <span>{loading ? 'מעדכן...' : 'עדכן סטטוס'}</span>
             </button>
           </div>
         </form>
@@ -88,3 +172,5 @@ export default function OrderStatusUpdate({ orderId, currentStatus, onClose, onU
     </div>
   );
 }
+
+export default OrderStatusUpdate;

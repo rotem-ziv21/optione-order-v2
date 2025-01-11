@@ -17,16 +17,23 @@ export default function CustomerSearch({ onClose, onCustomerSelect, businessId }
 
   const handleSearch = async () => {
     if (!searchTerm) return;
+    if (!businessId) {
+      setError('לא נמצא עסק פעיל');
+      return;
+    }
 
     setSearching(true);
     setError('');
 
     try {
-      const results = await searchContacts(searchTerm);
-      setContacts(results);
+      const results = await searchContacts(searchTerm, businessId);
+      setContacts(results || []);
+      if (results?.length === 0) {
+        setError('לא נמצאו לקוחות');
+      }
     } catch (error) {
       console.error('Error searching contacts:', error);
-      setError('שגיאה בחיפוש. אנא נסה שוב.');
+      setError(error instanceof Error ? error.message : 'שגיאה בחיפוש. אנא נסה שוב.');
     } finally {
       setSearching(false);
     }
