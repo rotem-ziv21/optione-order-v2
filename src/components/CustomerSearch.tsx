@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase';
 interface CustomerSearchProps {
   onClose: () => void;
   onCustomerSelect: () => void;
+  businessId: string;
 }
 
-export default function CustomerSearch({ onClose, onCustomerSelect }: CustomerSearchProps) {
+export default function CustomerSearch({ onClose, onCustomerSelect, businessId }: CustomerSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
   const [contacts, setContacts] = useState<CRMContact[]>([]);
@@ -33,12 +34,17 @@ export default function CustomerSearch({ onClose, onCustomerSelect }: CustomerSe
 
   const handleCustomerSelect = async (contact: CRMContact) => {
     try {
+      if (!businessId) {
+        throw new Error('לא נמצא עסק פעיל');
+      }
+
       const { error } = await supabase
         .from('customers')
         .insert([{
           contact_id: contact.id,
           name: `${contact.firstNameLowerCase} ${contact.lastNameLowerCase}`.trim(),
-          email: contact.email
+          email: contact.email,
+          business_id: businessId
         }]);
 
       if (error) throw error;

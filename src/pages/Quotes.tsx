@@ -3,6 +3,7 @@ import { Search, FilePlus, Send, Download, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import PaymentButton from '../components/PaymentButton';
+import { AlertCircle } from 'lucide-react';
 
 interface Quote {
   id: string;
@@ -16,12 +17,14 @@ interface Quote {
     name: string;
     email: string;
   };
+  business_id: string;
 }
 
 interface QuoteItem {
   quantity: number;
   price_at_time: number;
   product_name: string;
+  currency: string;
 }
 
 export default function Quotes() {
@@ -29,14 +32,95 @@ export default function Quotes() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteItems, setQuoteItems] = useState<Record<string, QuoteItem[]>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchQuotes();
+    getCurrentBusiness();
   }, []);
 
-  const fetchQuotes = async () => {
+  useEffect(() => {
+    if (currentBusinessId) {
+      fetchQuotes();
+    }
+  }, [currentBusinessId]);
+
+  const getCurrentBusiness = async () => {
     try {
-      const { data, error } = await supabase
+      console.log('Getting current business...');
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user:', user);
+      
+      if (!user) {
+        setError('משתמש לא מחובר');
+        return;
+      }
+
+      // אם המשתמש הוא אדמין, קח את העסק הראשון
+      if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
+        console.log('User is admin, getting first business');
+        const { data: businesses } = await supabase
+          .from('businesses')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        console.log('Admin business:', businesses);
+        if (businesses) {
+          setCurrentBusinessId(businesses.id);
+        }
+      } else {
+        console.log('Getting staff business');
+        // אם לא, קח את העסק שהמשתמש שייך אליו
+        const { data: staffBusiness } = await supabase
+          .from('business_staff')
+          .select('business_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        console.log('Staff business:', staffBusiness);
+        if (staffBusiness) {
+          setCurrentBusinessId(staffBusiness.business_id);
+        }
+      }
+    } catch (error) {
+      console.error('Error getting current business:', error);
+      setError('שגיאה בטעינת העסק');
+    }
+  };
+
+  const fetchQuotes = async () => {
+    if (!currentBusinessId) {
+      console.log('No current business ID');
+      setError('לא נמצא עסק פעיל');
+      return;
+    }
+
+    try {
+      console.log('Fetching quotes for business:', currentBusinessId);
+      // בדיקה שהמשתמש מחובר
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('משתמש לא מחובר');
+        return;
+      }
+
+      // בדיקה שהטבלאות קיימות
+      const { error: checkError } = await supabase
+        .from('quotes')
+        .select('id')
+        .limit(1);
+
+      if (checkError?.code === 'PGRST116') {
+        console.log('Quotes table does not exist');
+        setError('מערכת הצעות המחיר עדיין לא מוכנה');
+        setLoading(false);
+        return;
+      }
+
+      // טעינת הצעות מחיר לפי מזהה העסק
+      const { data: quotesData, error: quotesError } = await supabase
         .from('quotes')
         .select(`
           *,
@@ -45,34 +129,65 @@ export default function Quotes() {
             email
           )
         `)
+        .eq('business_id', currentBusinessId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setQuotes(data || []);
+      console.log('Quotes data:', quotesData);
+      console.log('Quotes error:', quotesError);
 
-      // Fetch items for each quote
+      if (quotesError) {
+        if (quotesError.code === 'PGRST116') {
+          console.log('Quotes table does not exist');
+          setError('מערכת הצעות המחיר עדיין לא מוכנה');
+          return;
+        }
+        throw quotesError;
+      }
+      
+      if (!quotesData || quotesData.length === 0) {
+        console.log('No quotes found');
+        setQuotes([]);
+        setQuoteItems({});
+        setError('אין הצעות מחיר');
+        return;
+      }
+
+      setQuotes(quotesData);
+
+      // טעינת פריטים לכל הצעת מחיר
       const items: Record<string, QuoteItem[]> = {};
-      for (const quote of data || []) {
-        const { data: quoteItems } = await supabase
+      for (const quote of quotesData) {
+        console.log('Fetching items for quote:', quote.id);
+        const { data: quoteItems, error: itemsError } = await supabase
           .from('quote_items')
           .select(`
             quantity,
             price_at_time,
-            product_name
+            product_name,
+            currency
           `)
           .eq('quote_id', quote.id);
 
+        console.log('Quote items:', quoteItems);
+        console.log('Items error:', itemsError);
+
+        if (itemsError) {
+          if (itemsError.code === 'PGRST116') {
+            console.log('Quote items table does not exist');
+            continue;
+          }
+          console.error(`Error fetching items for quote ${quote.id}:`, itemsError);
+          continue;
+        }
+
         if (quoteItems) {
-          items[quote.id] = quoteItems.map(item => ({
-            quantity: item.quantity,
-            price_at_time: item.price_at_time,
-            product_name: item.product_name
-          }));
+          items[quote.id] = quoteItems;
         }
       }
       setQuoteItems(items);
     } catch (error) {
       console.error('Error fetching quotes:', error);
+      setError('שגיאה בטעינת הצעות המחיר');
     } finally {
       setLoading(false);
     }
@@ -85,6 +200,58 @@ export default function Quotes() {
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600 flex items-center space-x-2">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!quotes.length) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="חיפוש הצעות מחיר..."
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button 
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700"
+          >
+            <FilePlus className="w-5 h-5" />
+            <span>צור הצעת מחיר</span>
+          </button>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 text-center">
+          <div className="text-gray-500">אין הצעות מחיר</div>
+          <button 
+            className="mt-4 text-blue-600 hover:text-blue-700 flex items-center space-x-2 mx-auto"
+          >
+            <FilePlus className="w-5 h-5" />
+            <span>צור הצעת מחיר חדשה</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredQuotes = quotes.filter(quote => 
+    quote.customers.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    quote.customers.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -129,7 +296,7 @@ export default function Quotes() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {quotes.map((quote) => (
+            {filteredQuotes.map((quote) => (
               <tr key={quote.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-right">
                   <div className="text-sm font-medium text-gray-900">{quote.customers.name}</div>

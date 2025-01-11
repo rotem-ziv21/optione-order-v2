@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Users, Settings as SettingsIcon, Edit2, Trash2, UserPlus, X } from 'lucide-react';
+import { 
+  Building2, Plus, Users, Settings as SettingsIcon, Edit2, Trash2, UserPlus, X,
+  BarChart2, Eye, EyeOff, Activity, Database, AlertCircle
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import BusinessUserForm from '../components/BusinessUserForm';
 
@@ -22,6 +25,21 @@ interface Staff {
   user_created_at: string;
 }
 
+interface Statistics {
+  totalBusinesses: number;
+  activeBusinesses: number;
+  totalUsers: number;
+  totalQuotes: number;
+}
+
+interface SystemLog {
+  id: string;
+  action: string;
+  details: string;
+  created_at: string;
+  user_email: string;
+}
+
 export default function BusinessManagement() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,9 +50,17 @@ export default function BusinessManagement() {
   const [error, setError] = useState<string | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statistics, setStatistics] = useState<Statistics | null>(null);
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+  const [activeTab, setActiveTab] = useState<'businesses' | 'statistics' | 'logs' | 'settings'>('businesses');
 
   useEffect(() => {
     checkAdminAccess();
+  }, []);
+
+  useEffect(() => {
+    // רק אם המשתמש הוא אדמין, טען את העסקים
     if (isAdmin) {
       fetchBusinesses();
     }
@@ -43,21 +69,81 @@ export default function BusinessManagement() {
   const checkAdminAccess = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      setIsAdmin(user?.email === 'rotem@optionecrm.com');
+      console.log('Current user details:', {
+        email: user?.email,
+        id: user?.id,
+        role: user?.role,
+        metadata: user?.user_metadata
+      });
+
+      if (!user) {
+        console.log('No user logged in');
+        setIsLoading(false);
+        return;
+      }
+
+      // בדיקת הרשאות לפי מייל
+      const isAdminByEmail = user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com';
+      setIsAdmin(isAdminByEmail);
+      
+      console.log('Is admin by email:', isAdminByEmail);
     } catch (error) {
-      console.error('Error checking admin access:', error);
+      console.error('Detailed error checking admin access:', error);
+      setError('שגיאה בבדיקת הרשאות: ' + (error instanceof Error ? error.message : 'שגיאה לא ידועה'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const fetchBusinesses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('businesses')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      if (error) throw error;
-      setBusinesses(data || []);
+      // אם המשתמש הוא אדמין, הוא יכול לראות את כל העסקים
+      const isAdminUser = user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com';
+      
+      if (isAdminUser) {
+        // אדמין רואה את כל העסקים
+        const { data: businessesData, error: businessesError } = await supabase
+          .from('businesses')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (businessesError) {
+          console.error('Detailed error:', businessesError);
+          throw businessesError;
+        }
+        
+        console.log('Fetched businesses:', businessesData);
+        setBusinesses(businessesData || []);
+      } else {
+        // משתמש רגיל רואה רק את העסקים שלו
+        const { data: staffBusinesses, error: staffError } = await supabase
+          .from('business_staff')
+          .select('business_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active');
+
+        if (staffError) {
+          console.error('Error fetching staff businesses:', staffError);
+          throw staffError;
+        }
+
+        if (staffBusinesses && staffBusinesses.length > 0) {
+          const businessIds = staffBusinesses.map(sb => sb.business_id);
+          const { data: businessesData, error: businessesError } = await supabase
+            .from('businesses')
+            .select('*')
+            .in('id', businessIds)
+            .order('created_at', { ascending: false });
+
+          if (businessesError) throw businessesError;
+          setBusinesses(businessesData || []);
+        } else {
+          setBusinesses([]);
+        }
+      }
     } catch (error) {
       console.error('Error fetching businesses:', error);
       setError('שגיאה בטעינת העסקים');
@@ -77,32 +163,8 @@ export default function BusinessManagement() {
       return data || [];
     } catch (error) {
       console.error('Error fetching business staff:', error);
-      throw error;
-    }
-  };
-
-  const handleAddBusiness = async () => {
-    if (!newBusinessName.trim()) {
-      setError('נא להזין שם עסק');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('businesses')
-        .insert([{
-          name: newBusinessName.trim(),
-          status: 'active'
-        }]);
-
-      if (error) throw error;
-
-      setShowAddBusiness(false);
-      setNewBusinessName('');
-      fetchBusinesses();
-    } catch (error) {
-      console.error('Error adding business:', error);
-      setError('שגיאה בהוספת העסק');
+      setError('שגיאה בטעינת צוות העסק');
+      return [];
     }
   };
 
@@ -112,23 +174,8 @@ export default function BusinessManagement() {
       setSelectedBusiness(business);
       setBusinessStaff(staff);
     } catch (error) {
+      console.error('Error selecting business:', error);
       setError('שגיאה בטעינת פרטי העסק');
-    }
-  };
-
-  const handleUpdateBusinessStatus = async (businessId: string, newStatus: 'active' | 'inactive') => {
-    try {
-      const { error } = await supabase
-        .from('businesses')
-        .update({ status: newStatus })
-        .eq('id', businessId);
-
-      if (error) throw error;
-
-      fetchBusinesses();
-    } catch (error) {
-      console.error('Error updating business status:', error);
-      setError('שגיאה בעדכון סטטוס העסק');
     }
   };
 
@@ -141,8 +188,10 @@ export default function BusinessManagement() {
 
       if (error) throw error;
 
+      // רענן את רשימת הצוות
       if (selectedBusiness) {
-        handleSelectBusiness(selectedBusiness);
+        const staff = await fetchBusinessStaff(selectedBusiness.id);
+        setBusinessStaff(staff);
       }
     } catch (error) {
       console.error('Error removing staff:', error);
@@ -150,10 +199,187 @@ export default function BusinessManagement() {
     }
   };
 
+  const fetchStatistics = async () => {
+    try {
+      // Get total businesses count
+      const { count: totalBusinesses } = await supabase
+        .from('businesses')
+        .select('*', { count: 'exact', head: true });
+
+      // Get active businesses count
+      const { count: activeBusinesses } = await supabase
+        .from('businesses')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      // Get total users count
+      const { count: totalUsers } = await supabase
+        .from('business_staff')
+        .select('*', { count: 'exact', head: true });
+
+      // Get total quotes count
+      const { count: totalQuotes } = await supabase
+        .from('quotes')
+        .select('*', { count: 'exact', head: true });
+
+      setStatistics({
+        totalBusinesses: totalBusinesses || 0,
+        activeBusinesses: activeBusinesses || 0,
+        totalUsers: totalUsers || 0,
+        totalQuotes: totalQuotes || 0
+      });
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+    }
+  };
+
+  const fetchSystemLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setSystemLogs(data || []);
+    } catch (error) {
+      console.error('Error fetching system logs:', error);
+    }
+  };
+
+  const toggleBusinessStatus = async (business: Business) => {
+    try {
+      const newStatus = business.status === 'active' ? 'inactive' : 'active';
+      const { error } = await supabase
+        .from('businesses')
+        .update({ status: newStatus })
+        .eq('id', business.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setBusinesses(businesses.map(b => 
+        b.id === business.id ? { ...b, status: newStatus } : b
+      ));
+
+      // Log the action
+      await supabase.from('system_logs').insert({
+        action: 'update_business_status',
+        details: `Changed business ${business.name} status to ${newStatus}`,
+        user_email: (await supabase.auth.getUser()).data.user?.email
+      });
+
+      // Refresh statistics
+      fetchStatistics();
+    } catch (error) {
+      console.error('Error toggling business status:', error);
+      setError('שגיאה בעדכון סטטוס העסק');
+    }
+  };
+
+  const handleAddBusiness = async () => {
+    if (!newBusinessName.trim()) {
+      setError('נא להזין שם עסק');
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('משתמש לא מחובר');
+        return;
+      }
+
+      // הוספת העסק
+      const { data: newBusiness, error: businessError } = await supabase
+        .from('businesses')
+        .insert([{
+          name: newBusinessName.trim(),
+          status: 'active',
+          owner_id: user.id,
+          settings: {}
+        }])
+        .select('*')
+        .single();
+
+      if (businessError) {
+        console.error('Business creation error:', businessError);
+        throw businessError;
+      }
+      
+      if (!newBusiness) {
+        throw new Error('לא נוצר עסק חדש');
+      }
+
+      console.log('Created new business:', newBusiness);
+
+      // הוספת המשתמש כאדמין בעסק
+      const { error: staffError } = await supabase
+        .from('business_staff')
+        .insert([{
+          user_id: user.id,
+          business_id: newBusiness.id,
+          role: 'admin',
+          status: 'active',
+          permissions: {
+            can_view_customers: true,
+            can_edit_customers: true,
+            can_view_products: true,
+            can_edit_products: true,
+            can_view_orders: true,
+            can_edit_orders: true,
+            can_manage_staff: true
+          }
+        }]);
+
+      if (staffError) {
+        console.error('Staff creation error:', staffError);
+        throw staffError;
+      }
+
+      // לוג הפעולה
+      await supabase.from('system_logs').insert({
+        action: 'create_business',
+        details: `Created new business: ${newBusiness.name}`,
+        user_email: user.email
+      });
+
+      setShowAddBusiness(false);
+      setNewBusinessName('');
+      fetchBusinesses();
+      fetchStatistics();
+    } catch (error) {
+      console.error('Error adding business:', error);
+      setError('שגיאה בהוספת העסק: ' + (error instanceof Error ? error.message : JSON.stringify(error)));
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchStatistics();
+      fetchSystemLogs();
+    }
+  }, [isAdmin]);
+
+  // אם עדיין טוען, הצג מסך טעינה
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-gray-600">טוען...</div>
+      </div>
+    );
+  }
+
+  // אם המשתמש לא אדמין, הצג הודעת שגיאה
   if (!isAdmin) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-600">אין לך גישה לאזור זה</div>
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="text-red-600 mb-4">
+          <X className="w-16 h-16" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">אין גישה</h1>
+        <p className="text-gray-600">אין לך הרשאות לצפות בדף זה</p>
       </div>
     );
   }
@@ -167,116 +393,234 @@ export default function BusinessManagement() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">ניהול עסקים</h1>
+    <div className="container mx-auto px-4 py-8">
+      {/* Tabs */}
+      <div className="flex space-x-4 mb-8">
         <button
-          onClick={() => setShowAddBusiness(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700"
+          onClick={() => setActiveTab('businesses')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+            activeTab === 'businesses' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}
         >
-          <Plus className="w-5 h-5" />
-          <span>הוסף עסק</span>
+          <Building2 className="w-5 h-5" />
+          <span>עסקים</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('statistics')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+            activeTab === 'statistics' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          <BarChart2 className="w-5 h-5" />
+          <span>סטטיסטיקות</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+            activeTab === 'logs' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          <Activity className="w-5 h-5" />
+          <span>לוגים</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+            activeTab === 'settings' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          <SettingsIcon className="w-5 h-5" />
+          <span>הגדרות</span>
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      {/* Add Business Form */}
-      {showAddBusiness && (
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center space-x-4">
-            <input
-              type="text"
-              value={newBusinessName}
-              onChange={(e) => setNewBusinessName(e.target.value)}
-              placeholder="שם העסק"
-              className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
+      {/* Content based on active tab */}
+      {activeTab === 'businesses' && (
+        <div className="space-y-6">
+          {/* Add Business Button */}
+          <div className="flex justify-end">
             <button
-              onClick={handleAddBusiness}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700"
+              onClick={() => setShowAddBusiness(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
             >
               <Plus className="w-5 h-5" />
-              <span>הוסף</span>
+              <span>הוסף עסק</span>
             </button>
-            <button
-              onClick={() => {
-                setShowAddBusiness(false);
-                setNewBusinessName('');
-              }}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          </div>
+
+          {/* Businesses List */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {businesses.map((business) => (
+              <div key={business.id} className="bg-white rounded-xl shadow-sm p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-semibold">{business.name}</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => toggleBusinessStatus(business)}
+                      className={`p-2 rounded-lg ${
+                        business.status === 'active' 
+                          ? 'text-green-600 hover:bg-green-50' 
+                          : 'text-red-600 hover:bg-red-50'
+                      }`}
+                      title={business.status === 'active' ? 'חסום עסק' : 'הפעל עסק'}
+                    >
+                      {business.status === 'active' ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                    </button>
+                    <button
+                      onClick={() => handleSelectBusiness(business)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                      title="ערוך עסק"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500 mb-4">
+                  נוצר ב-{new Date(business.created_at).toLocaleDateString('he-IL')}
+                </div>
+                <div className="flex items-center space-x-2 text-sm">
+                  <Users className="w-4 h-4 text-gray-400" />
+                  <span>{businessStaff.filter(s => s.id === business.id).length} משתמשים</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Businesses Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {businesses.map((business) => (
-          <div
-            key={business.id}
-            className={`bg-white rounded-lg shadow-sm p-6 border ${
-              selectedBusiness?.id === business.id ? 'border-blue-500' : 'border-gray-200'
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-lg ${
-                  business.status === 'active' ? 'bg-green-100' : 'bg-gray-100'
-                }`}>
-                  <Building2 className={`w-6 h-6 ${
-                    business.status === 'active' ? 'text-green-600' : 'text-gray-600'
-                  }`} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900">{business.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    נוצר ב-{new Date(business.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleUpdateBusinessStatus(
-                  business.id,
-                  business.status === 'active' ? 'inactive' : 'active'
-                )}
-                className={`text-sm px-2 py-1 rounded-full ${
-                  business.status === 'active'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                {business.status === 'active' ? 'פעיל' : 'לא פעיל'}
-              </button>
+      {activeTab === 'statistics' && statistics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">סה"כ עסקים</h3>
+              <Building2 className="w-8 h-8 text-blue-600" />
             </div>
+            <div className="text-3xl font-bold">{statistics.totalBusinesses}</div>
+            <div className="text-sm text-gray-500 mt-2">
+              {statistics.activeBusinesses} פעילים
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">סה"כ משתמשים</h3>
+              <Users className="w-8 h-8 text-green-600" />
+            </div>
+            <div className="text-3xl font-bold">{statistics.totalUsers}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">סה"כ הצעות מחיר</h3>
+              <Database className="w-8 h-8 text-purple-600" />
+            </div>
+            <div className="text-3xl font-bold">{statistics.totalQuotes}</div>
+          </div>
+        </div>
+      )}
 
-            <div className="mt-4 flex justify-between items-center">
-              <button
-                onClick={() => handleSelectBusiness(business)}
-                className="text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-              >
-                <Users className="w-4 h-4" />
-                <span>ניהול צוות</span>
-              </button>
-              <div className="flex space-x-2">
-                <button className="text-gray-600 hover:text-gray-900">
-                  <Edit2 className="w-4 h-4" />
+      {activeTab === 'logs' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    תאריך
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    פעולה
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    פרטים
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    משתמש
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {systemLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(log.created_at).toLocaleString('he-IL')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {log.action}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {log.details}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {log.user_email}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <div className="flex items-center space-x-2 text-yellow-600 bg-yellow-50 p-4 rounded-lg mb-6">
+            <AlertCircle className="w-5 h-5" />
+            <span>הגדרות המערכת יתווספו בקרוב</span>
+          </div>
+        </div>
+      )}
+
+      {/* Add Business Modal */}
+      {showAddBusiness && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <button
+              onClick={() => setShowAddBusiness(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            <h2 className="text-xl font-semibold mb-4">הוספת עסק חדש</h2>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md flex items-center">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  שם העסק
+                </label>
+                <input
+                  type="text"
+                  value={newBusinessName}
+                  onChange={(e) => setNewBusinessName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="הכנס שם עסק"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowAddBusiness(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  ביטול
                 </button>
-                <button className="text-red-600 hover:text-red-900">
-                  <Trash2 className="w-4 h-4" />
+                <button
+                  onClick={handleAddBusiness}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  הוסף עסק
                 </button>
               </div>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Selected Business Staff */}
       {selectedBusiness && (

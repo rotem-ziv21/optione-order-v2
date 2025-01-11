@@ -25,9 +25,10 @@ interface CustomerProductFormProps {
     stock: number;
   }>;
   customerId: string;
+  businessId: string;
 }
 
-export default function CustomerProductForm({ onClose, onSubmit, products, customerId }: CustomerProductFormProps) {
+export default function CustomerProductForm({ onClose, onSubmit, products, customerId, businessId }: CustomerProductFormProps) {
   const { register, control, handleSubmit, watch, formState: { errors } } = useForm<CustomerProductFormData>({
     defaultValues: {
       products: [{ productId: products[0]?.id || '', quantity: 1 }]
@@ -70,6 +71,7 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
   };
 
   const handleFormSubmit = async (data: CustomerProductFormData, action: 'order' | 'quote') => {
+    if (submitting) return;  
     if (!customerId) {
       setError('מזהה לקוח חסר');
       return;
@@ -104,51 +106,19 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
     setError(null);
 
     try {
-      // Calculate total with proper decimal handling
-      const totalAmount = Number(data.products.reduce((sum, item) => {
-        const product = products.find(p => p.id === item.productId);
-        return sum + (product ? product.price * item.quantity : 0);
-      }, 0).toFixed(2));
-
-      const { data: order, error: orderError } = await supabase
-        .from('customer_orders')
-        .insert({
-          customer_id: customerId,
-          total_amount: totalAmount,
-          currency: products[0]?.currency || 'ILS',
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderItems = data.products.map(item => {
-        const product = products.find(p => p.id === item.productId);
-        if (!product) throw new Error(`Product not found: ${item.productId}`);
-        
-        return {
-          order_id: order.id,
-          product_id: item.productId,
-          quantity: item.quantity,
-          price_at_time: Number(product.price.toFixed(2)),
-          currency: product.currency
-        };
-      });
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
       onSubmit(data);
+      onClose();
     } catch (error) {
       console.error('Error adding order:', error);
       setError(error instanceof Error ? error.message : 'שגיאה בהוספת ההזמנה');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleQuoteClick = async () => {
+    if (submitting) return;
+    const data = await handleSubmit((data) => handleFormSubmit(data, 'quote'))();
   };
 
   return (
@@ -160,12 +130,13 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-500"
+              disabled={submitting}
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit((data) => handleFormSubmit(data, 'order'))} className="p-6 space-y-6">
+          <form className="p-6 space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
                 {error}
@@ -179,6 +150,7 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
                   type="button"
                   onClick={() => append({ productId: products[0]?.id || '', quantity: 1 })}
                   className="text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                  disabled={submitting}
                 >
                   <Plus className="w-4 h-4" />
                   <span>הוסף מוצר</span>
@@ -191,6 +163,7 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
                     <select
                       {...register(`products.${index}.productId` as const)}
                       className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      disabled={submitting}
                     >
                       <option value="">בחר מוצר</option>
                       {products.map(product => (
@@ -210,6 +183,7 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
                       })}
                       className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       placeholder="כמות"
+                      disabled={submitting}
                     />
                   </div>
 
@@ -217,6 +191,7 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
                     type="button"
                     onClick={() => remove(index)}
                     className="text-red-600 hover:text-red-700"
+                    disabled={submitting}
                   >
                     <Minus className="w-5 h-5" />
                   </button>
@@ -236,20 +211,23 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
                 type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={submitting}
               >
                 ביטול
               </button>
               <button
                 type="button"
-                onClick={() => handleSubmit((data) => handleFormSubmit(data, 'quote'))()}
+                onClick={handleQuoteClick}
+                disabled={submitting}
                 className="px-4 py-2 text-sm font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-50"
               >
                 צור הצעת מחיר
               </button>
               <button
-                type="submit"
+                type="button"
                 disabled={submitting}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                onClick={() => handleSubmit((data) => handleFormSubmit(data, 'order'))()}
               >
                 {submitting ? 'מעבד...' : 'צור הזמנה'}
               </button>

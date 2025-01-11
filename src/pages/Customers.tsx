@@ -15,6 +15,7 @@ interface Product {
   currency: string;
   stock: number;
   sku: string;
+  business_id: string;
 }
 
 interface CustomerOrder {
@@ -24,6 +25,7 @@ interface CustomerOrder {
   status: 'pending' | 'completed' | 'cancelled';
   created_at: string;
   items: OrderItem[];
+  business_id: string;
 }
 
 interface OrderItem {
@@ -38,6 +40,7 @@ interface Customer {
   name: string;
   email: string;
   contact_id: string;
+  business_id: string;
 }
 
 export default function Customers() {
@@ -53,18 +56,62 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerOrders, setCustomerOrders] = useState<Record<string, CustomerOrder[]>>({});
   const [loading, setLoading] = useState(true);
+  const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
+  const [isAddingProducts, setIsAddingProducts] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-    fetchCustomers();
-    fetchCustomerOrders();
+    getCurrentBusiness();
   }, []);
 
+  useEffect(() => {
+    if (currentBusinessId) {
+      fetchProducts();
+      fetchCustomers();
+      fetchCustomerOrders();
+    }
+  }, [currentBusinessId]);
+
+  const getCurrentBusiness = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // אם המשתמש הוא אדמין, קח את העסק הראשון
+      if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
+        const { data: businesses } = await supabase
+          .from('businesses')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        if (businesses) {
+          setCurrentBusinessId(businesses.id);
+        }
+      } else {
+        // אם לא, קח את העסק שהמשתמש שייך אליו
+        const { data: staffBusiness } = await supabase
+          .from('business_staff')
+          .select('business_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        if (staffBusiness) {
+          setCurrentBusinessId(staffBusiness.business_id);
+        }
+      }
+    } catch (error) {
+      console.error('Error getting current business:', error);
+    }
+  };
+
   const fetchProducts = async () => {
+    if (!currentBusinessId) return;
     try {
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('business_id', currentBusinessId)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -75,10 +122,12 @@ export default function Customers() {
   };
 
   const fetchCustomers = async () => {
+    if (!currentBusinessId) return;
     try {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('business_id', currentBusinessId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -89,6 +138,7 @@ export default function Customers() {
   };
 
   const fetchCustomerOrders = async () => {
+    if (!currentBusinessId) return;
     try {
       const { data: orders, error: ordersError } = await supabase
         .from('customer_orders')
@@ -98,9 +148,10 @@ export default function Customers() {
           total_amount,
           currency,
           status,
-          created_at
+          created_at,
+          business_id
         `)
-        .order('created_at', { ascending: false });
+        .eq('business_id', currentBusinessId);
 
       if (ordersError) throw ordersError;
 
@@ -148,13 +199,14 @@ export default function Customers() {
   };
 
   const handleAddProducts = async (data: { products: Array<{ productId: string; quantity: number }> }) => {
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || isAddingProducts) return;
 
+    setIsAddingProducts(true);
     try {
-      const totalAmount = data.products.reduce((sum, item) => {
+      const totalAmount = Number(data.products.reduce((sum, item) => {
         const product = products.find(p => p.id === item.productId);
         return sum + (product ? product.price * item.quantity : 0);
-      }, 0);
+      }, 0).toFixed(2));
 
       const { data: order, error: orderError } = await supabase
         .from('customer_orders')
@@ -162,7 +214,8 @@ export default function Customers() {
           customer_id: selectedCustomer.contact_id,
           total_amount: totalAmount,
           currency: 'ILS',
-          status: 'pending'
+          status: 'pending',
+          business_id: currentBusinessId
         }])
         .select()
         .single();
@@ -187,9 +240,11 @@ export default function Customers() {
       if (itemsError) throw itemsError;
 
       setShowProductForm(false);
-      fetchCustomerOrders();
+      await fetchCustomerOrders();  // חכה לסיום הפעולה
     } catch (error) {
       console.error('Error adding order:', error);
+    } finally {
+      setIsAddingProducts(false);
     }
   };
 
@@ -307,6 +362,7 @@ export default function Customers() {
           onSubmit={handleAddProducts}
           products={products}
           customerId={selectedCustomer.contact_id}
+          businessId={currentBusinessId || ''}
         />
       )}
 
@@ -317,6 +373,7 @@ export default function Customers() {
             setShowSearch(false);
             fetchCustomers();
           }}
+          businessId={currentBusinessId || ''}
         />
       )}
 

@@ -16,12 +16,26 @@ export default function Login() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // נסה קודם להירשם אם המשתמש לא קיים
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
-        password
+        password,
+        options: {
+          data: {
+            role: 'admin'
+          }
+        }
       });
 
-      if (error) throw error;
+      // אם ההרשמה נכשלה (כנראה כי המשתמש כבר קיים), ננסה להתחבר
+      if (signUpError) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (signInError) throw signInError;
+      }
 
       navigate('/');
     } catch (error) {

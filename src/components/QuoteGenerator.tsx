@@ -155,9 +155,47 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
     setError(null);
 
     try {
-      const totalAmount = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('משתמש לא מחובר');
+      }
 
-      // Create quote first
+      // בדיקת העסק המחובר
+      let businessId = null;
+
+      if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
+        const { data: businesses } = await supabase
+          .from('businesses')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        if (businesses) {
+          businessId = businesses.id;
+        }
+      } else {
+        const { data: staffBusiness } = await supabase
+          .from('business_staff')
+          .select('business_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        if (staffBusiness) {
+          businessId = staffBusiness.business_id;
+        }
+      }
+
+      if (!businessId) {
+        throw new Error('לא נמצא עסק פעיל');
+      }
+
+      // חישוב הסכום הכולל
+      const totalAmount = Number(products.reduce((sum, product) => 
+        sum + (Number(product.price) * product.quantity)
+      , 0).toFixed(2));
+
+      // יצירת הצעת המחיר
       const { data: quote, error: quoteError } = await supabase
         .from('quotes')
         .insert([{
@@ -165,7 +203,8 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
           total_amount: totalAmount,
           currency: products[0].currency,
           valid_until: validUntil.toISOString(),
-          status: 'draft'
+          status: 'draft',
+          business_id: businessId
         }])
         .select()
         .single();
@@ -178,12 +217,12 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
 
       setQuoteId(quote.id);
 
-      // Create quote items without product_id
+      // יצירת פריטי הצעת המחיר
       const quoteItems = products.map(product => ({
         quote_id: quote.id,
         product_name: product.name,
         quantity: product.quantity,
-        price_at_time: product.price,
+        price_at_time: Number(product.price.toFixed(2)),
         currency: product.currency
       }));
 
@@ -192,6 +231,10 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
         .insert(quoteItems);
 
       if (itemsError) throw itemsError;
+
+      // סגירת החלון ורענון הרשימה
+      onClose();
+      window.location.reload();
     } catch (error) {
       console.error('Error saving quote:', error);
       setError(error instanceof Error ? error.message : 'שגיאה בשמירת הצעת המחיר');
