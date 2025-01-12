@@ -1,3 +1,74 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* React DayPicker custom styles */
+.rdp {
+  --rdp-cell-size: 48px !important;
+  --rdp-accent-color: #3b82f6 !important;
+  --rdp-background-color: #e5edff !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+.rdp-months {
+  width: 100% !important;
+}
+
+.rdp-month {
+  width: 100% !important;
+}
+
+.rdp-table {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.rdp-cell {
+  padding: 2px !important;
+}
+
+.rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
+  background-color: #e5edff !important;
+}
+
+.rdp-day_selected {
+  background-color: var(--rdp-accent-color) !important;
+  color: white !important;
+  font-weight: bold !important;
+}
+
+.rdp-day_today {
+  font-weight: bold !important;
+  border: 2px solid var(--rdp-accent-color) !important;
+  color: var(--rdp-accent-color) !important;
+}
+
+.rdp-button {
+  width: var(--rdp-cell-size) !important;
+  height: var(--rdp-cell-size) !important;
+  font-size: 1.1rem !important;
+  border-radius: 8px !important;
+}
+
+.rdp-caption {
+  font-size: 1.2rem !important;
+  margin-bottom: 12px !important;
+}
+
+.rdp-head_cell {
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  padding: 8px 0 !important;
+}
+
+.rdp-nav {
+  display: flex !important;
+  justify-content: space-between !important;
+  padding: 0 0.5rem !important;
+}
+
+.rdp-nav_button {
+  width: 32px !important;
+  height: 32px !important;
+}

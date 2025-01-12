@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Package, TrendingUp, Users, DollarSign, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } from 'date-fns';
+import { DateRange } from 'react-day-picker';
+import DateRangeFilter from '../components/DateRangeFilter';
+import StaffStats from '../components/StaffStats';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -31,10 +34,11 @@ export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
@@ -56,38 +60,38 @@ export default function Dashboard() {
       }
 
       // Fetch completed orders for total sales and monthly revenue
-      const currentDate = new Date();
-      const startOfCurrentMonth = startOfMonth(currentDate);
-      const endOfCurrentMonth = endOfMonth(currentDate);
-
-      const { data: orders, error: ordersError } = await supabase
+      let query = supabase
         .from('customer_orders')
         .select('total_amount, created_at')
         .eq('status', 'completed');
 
+      if (dateRange?.from) {
+        query = query.gte('created_at', startOfDay(dateRange.from).toISOString());
+      }
+      if (dateRange?.to) {
+        query = query.lte('created_at', endOfDay(dateRange.to).toISOString());
+      }
+
+      const { data: orders, error: ordersError } = await query;
+
       if (ordersError) throw ordersError;
 
       const totalSales = orders?.length || 0;
-      const monthlyRevenue = orders
-        ?.filter(order => {
-          const orderDate = new Date(order.created_at);
-          return orderDate >= startOfCurrentMonth && orderDate <= endOfCurrentMonth;
-        })
-        .reduce((sum, order) => sum + order.total_amount, 0) || 0;
+      const totalRevenue = orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
 
       setStats({
         totalProducts: productsData?.length || 0,
         totalSales,
         activeCustomers: customersData?.length || 0,
-        monthlyRevenue,
+        monthlyRevenue: totalRevenue,
         quotesCount: quotesData?.length || 0
       });
 
       // Fetch monthly sales data for the last 6 months
       const monthlyData = [];
       for (let i = 0; i < 6; i++) {
-        const monthStart = startOfMonth(subMonths(currentDate, i));
-        const monthEnd = endOfMonth(subMonths(currentDate, i));
+        const monthStart = startOfMonth(subMonths(new Date(), i));
+        const monthEnd = endOfMonth(subMonths(new Date(), i));
         
         const monthOrders = orders?.filter(order => {
           const orderDate = new Date(order.created_at);
@@ -102,7 +106,7 @@ export default function Dashboard() {
       setMonthlyData(monthlyData);
 
       // Fetch top selling products
-      const { data: orderItems, error: itemsError } = await supabase
+      let itemsQuery = supabase
         .from('order_items')
         .select(`
           quantity,
@@ -111,10 +115,20 @@ export default function Dashboard() {
             name
           ),
           customer_orders!inner (
-            status
+            status,
+            created_at
           )
         `)
         .eq('customer_orders.status', 'completed');
+
+      if (dateRange?.from) {
+        itemsQuery = itemsQuery.gte('customer_orders.created_at', startOfDay(dateRange.from).toISOString());
+      }
+      if (dateRange?.to) {
+        itemsQuery = itemsQuery.lte('customer_orders.created_at', endOfDay(dateRange.to).toISOString());
+      }
+
+      const { data: orderItems, error: itemsError } = await itemsQuery;
 
       if (itemsError) throw itemsError;
 
@@ -157,6 +171,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Date Range Filter */}
+      <div className="flex justify-start">
+        <DateRangeFilter dateRange={dateRange} onDateRangeChange={setDateRange} />
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
@@ -279,6 +298,11 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Staff Stats */}
+      <div className="mt-6">
+        <StaffStats />
       </div>
     </div>
   );

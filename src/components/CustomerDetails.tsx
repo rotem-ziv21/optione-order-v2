@@ -146,20 +146,73 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
     });
   };
 
-  const handleCreateQuote = () => {
+  const handleCreateQuote = async () => {
     const selectedOrdersData = orders.filter(order => selectedOrders.includes(order.id));
     if (selectedOrdersData.length > 0) {
-      const products = selectedOrdersData.flatMap(order => 
-        order.items.map(item => ({
-          id: '', // We don't need the actual product ID for quotes
-          name: item.product_name,
-          quantity: item.quantity,
-          price: item.price,
-          currency: order.currency
-        }))
-      );
-      setSelectedOrdersForQuote(selectedOrdersData);
-      setShowQuoteGenerator(true);
+      try {
+        // קבלת העסק המחובר
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.error('No authenticated user found');
+          return;
+        }
+
+        let businessId = null;
+
+        if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
+          const { data: businesses } = await supabase
+            .from('businesses')
+            .select('id')
+            .limit(1)
+            .single();
+          
+          if (businesses) {
+            businessId = businesses.id;
+          }
+        } else {
+          const { data: staffBusiness } = await supabase
+            .from('business_staff')
+            .select('business_id')
+            .eq('user_id', user.id)
+            .limit(1)
+            .single();
+          
+          if (staffBusiness) {
+            businessId = staffBusiness.business_id;
+          }
+        }
+
+        if (!businessId) {
+          console.error('No active business found');
+          return;
+        }
+
+        // מיפוי המוצרים מההזמנות שנבחרו
+        const products = selectedOrdersData.flatMap(order => 
+          (order.items || []).map(item => ({
+            name: item.product_name,
+            quantity: item.quantity,
+            price: Number(item.price),
+            currency: order.currency || 'ILS'
+          }))
+        );
+
+        // בדיקה שיש מוצרים ומחירים תקינים
+        if (products.length === 0 || products.some(p => !p.price || p.price <= 0)) {
+          console.error('Invalid products data:', products);
+          return;
+        }
+
+        console.log('Creating quote with products:', products);
+        setShowQuoteGenerator(true);
+        setSelectedOrdersForQuote(selectedOrdersData);
+        
+        // שמירת ה-business_id ב-localStorage
+        localStorage.setItem('currentBusinessId', businessId);
+        console.log('Saved business ID:', businessId); // לוג לדיבוג
+      } catch (error) {
+        console.error('Error preparing quote:', error);
+      }
     }
   };
 
@@ -376,19 +429,17 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
       {showQuoteGenerator && (
         <QuoteGenerator
           customer={customer}
-          products={selectedOrdersForQuote.length > 0 
-            ? selectedOrdersForQuote.flatMap(order => 
-                order.items.map(item => ({
-                  id: '',
-                  name: item.product_name,
-                  quantity: item.quantity,
-                  price: item.price,
-                  currency: order.currency
-                }))
-              )
-            : []}
+          products={selectedOrdersForQuote.flatMap(order => 
+            (order.items || []).map(item => ({
+              name: item.product_name,
+              quantity: item.quantity,
+              price: Number(item.price),
+              currency: order.currency || 'ILS'
+            }))
+          )}
           onClose={() => {
             setShowQuoteGenerator(false);
+            setSelectedOrders([]);
             setSelectedOrdersForQuote([]);
           }}
         />

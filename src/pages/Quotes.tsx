@@ -193,6 +193,25 @@ export default function Quotes() {
     }
   };
 
+  const handleSendQuote = async (quote: Quote) => {
+    try {
+      const { error } = await supabase
+        .from('quotes')
+        .update({ status: 'sent' })
+        .eq('id', quote.id);
+
+      if (error) throw error;
+
+      // עדכון הרשימה המקומית
+      setQuotes(quotes.map(q => 
+        q.id === quote.id ? { ...q, status: 'sent' } : q
+      ));
+    } catch (error) {
+      console.error('Error sending quote:', error);
+      setError('שגיאה בשליחת הצעת המחיר');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -326,9 +345,14 @@ export default function Quotes() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 ml-3">
-                    <Send className="w-5 h-5" />
-                  </button>
+                  {quote.status === 'draft' && (
+                    <button 
+                      onClick={() => handleSendQuote(quote)}
+                      className="text-blue-600 hover:text-blue-900 ml-3"
+                    >
+                      <Send className="w-5 h-5" />
+                    </button>
+                  )}
                   <button className="text-gray-600 hover:text-gray-900 ml-3">
                     <Download className="w-5 h-5" />
                   </button>

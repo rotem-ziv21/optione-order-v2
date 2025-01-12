@@ -155,38 +155,20 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
     setError(null);
 
     try {
+      // קבלת המשתמש הנוכחי
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('משתמש לא מחובר');
       }
 
-      // בדיקת העסק המחובר
-      let businessId = null;
+      // קבלת העסק הראשון מהדאטהבייס
+      const { data: business, error: businessError } = await supabase
+        .from('businesses')
+        .select('id')
+        .limit(1)
+        .single();
 
-      if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
-        const { data: businesses } = await supabase
-          .from('businesses')
-          .select('id')
-          .limit(1)
-          .single();
-        
-        if (businesses) {
-          businessId = businesses.id;
-        }
-      } else {
-        const { data: staffBusiness } = await supabase
-          .from('business_staff')
-          .select('business_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
-        
-        if (staffBusiness) {
-          businessId = staffBusiness.business_id;
-        }
-      }
-
-      if (!businessId) {
+      if (businessError || !business) {
         throw new Error('לא נמצא עסק פעיל');
       }
 
@@ -204,7 +186,8 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
           currency: products[0].currency,
           valid_until: validUntil.toISOString(),
           status: 'draft',
-          business_id: businessId
+          business_id: business.id,
+          created_by: user.id // הוספת מזהה היוצר
         }])
         .select()
         .single();
@@ -222,7 +205,7 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
         quote_id: quote.id,
         product_name: product.name,
         quantity: product.quantity,
-        price_at_time: Number(product.price.toFixed(2)),
+        price_at_time: Number(product.price),
         currency: product.currency
       }));
 
