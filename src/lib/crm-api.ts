@@ -147,9 +147,9 @@ export const addContactNote = async ({ contactId, body, businessId }: AddNotePar
 
     const url = `/contacts/${contactId}/notes`;
     const data = {
-      userId: contactId,
       body,
-      locationId: settings.location_id  // הוספת מזהה המיקום
+      contact: contactId,
+      location: settings.location_id
     };
 
     console.log('Sending note to CRM API:', {
@@ -170,7 +170,7 @@ export const addContactNote = async ({ contactId, body, businessId }: AddNotePar
         throw new Error('שגיאת הרשאות מול ה-CRM. אנא בדוק את הגדרות ה-API Token');
       } else if (error.response?.status === 422) {
         console.error('CRM API 422 Error:', error.response.data);
-        throw new Error('שגיאה בפרמטרים של ההערה. אנא נסה שוב');
+        throw new Error('שגיאת וולידציה מול ה-CRM. אנא בדוק את פרטי ההערה');
       } else if (!error.response) {
         console.error('CRM API Network Error:', error.message);
         throw new Error('שגיאת תקשורת מול ה-CRM. אנא נסה שוב מאוחר יותר');
