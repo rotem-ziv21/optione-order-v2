@@ -16,6 +16,7 @@ interface CardcomPaymentRequest {
     quantity: number;
   }>;
   payments?: number;
+  orderId?: string;
 }
 
 interface CardcomResponse {
@@ -36,7 +37,8 @@ export const createPaymentPage = async ({
   failureUrl,
   customer,
   items,
-  payments = 1
+  payments = 1,
+  orderId
 }: CardcomPaymentRequest): Promise<{ url: string; lowProfileId: string }> => {
   try {
     console.log('Creating payment page with data:', { amount, items }); // Debug log
@@ -100,6 +102,7 @@ export const createPaymentPage = async ({
       MaxPayments: payments,
       SuccessRedirectUrl: successUrl,
       FailedRedirectUrl: failureUrl,
+      WebHookUrl: `${window.location.origin}/.netlify/functions/cardcom-webhook`,
       Document: {
         To: customer.name,
         Email: customer.email,
