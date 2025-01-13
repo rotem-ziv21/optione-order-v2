@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { addContactNote } from '../lib/crm-api';
+import { useOrderSubscription } from '../hooks/useOrderSubscription';
+import toast from 'react-hot-toast';
 
 interface OrderStatusUpdateProps {
   orderId: string;
@@ -11,10 +13,10 @@ interface OrderStatusUpdateProps {
   onUpdate: () => void;
 }
 
-const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, onClose, onUpdate, businessId }) => {
+const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentStatus, onClose, onUpdate, businessId }) => {
   console.log('OrderStatusUpdate props:', { orderId, businessId });
 
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(currentStatus);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
 
@@ -24,6 +26,15 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, onClose,
     { value: 'cancelled', label: 'בוטל' },
     { value: 'paid', label: 'שולם' }
   ];
+
+  // האזנה לשינויים בהזמנה
+  useOrderSubscription(orderId, (updatedOrder) => {
+    if (updatedOrder.payment_status === 'paid' && status !== 'paid') {
+      setStatus('paid');
+      toast.success('התשלום התקבל בהצלחה!');
+      onUpdate();
+    }
+  });
 
   const handleUpdateStatus = async () => {
     if (!orderId || !status) {

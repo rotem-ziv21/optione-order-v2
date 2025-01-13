@@ -4,9 +4,10 @@ import { X, Loader2 } from 'lucide-react';
 interface CardcomPaymentModalProps {
   url: string;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export default function CardcomPaymentModal({ url, onClose }: CardcomPaymentModalProps) {
+export default function CardcomPaymentModal({ url, onClose, onSuccess }: CardcomPaymentModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,14 @@ export default function CardcomPaymentModal({ url, onClose }: CardcomPaymentModa
             className="absolute inset-0 w-full h-full border-0"
             style={{ minHeight: '1000px', width: '100%' }}
             title="Cardcom Payment Page"
-            onLoad={() => setLoading(false)}
+            onLoad={(e) => {
+              setLoading(false);
+              // בדיקה אם הדף שנטען הוא דף ההצלחה של Cardcom
+              const iframe = e.target as HTMLIFrameElement;
+              if (iframe.contentWindow?.location.href.includes('Success')) {
+                onSuccess?.();
+              }
+            }}
             onError={() => setError('שגיאה בטעינת דף התשלום')}
             allow="payment *; fullscreen *"
             referrerPolicy="origin"

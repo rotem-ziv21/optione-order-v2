@@ -11,6 +11,7 @@ import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
 import BusinessManagement from './pages/BusinessManagement';
 import Admin from './pages/Admin';
+import { Toaster } from 'react-hot-toast';
 
 const queryClient = new QueryClient();
 
@@ -58,7 +59,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <QueryClientProvider client={queryClient}>
+            <Toaster position="top-center" reverseOrder={false} />
+            <AppRoutes />
+          </QueryClientProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
