@@ -2,10 +2,14 @@ import { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
 // יצירת חיבור לסופאבייס
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL!,
-  process.env.VITE_SUPABASE_ANON_KEY!
-)
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing required environment variables SUPABASE_URL or SUPABASE_SERVICE_KEY')
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 interface CardcomWebhookPayload {
   terminalnumber: string;

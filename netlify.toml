@@ -9,6 +9,8 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  SUPABASE_URL = "https://nebyatzjlumpqylpjcap.supabase.co"
+  SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lYnlhdHpqbHVtcHF5bHBqY2FwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwMjQ1NzUwMiwiZXhwIjoyMDE4MDMzNTAyfQ.Nq0vPx5LXrVuV5kXmJMXCGUGAWzVfuqkbFZiVQOUGYM"
 
 [[headers]]
   for = "/*"
