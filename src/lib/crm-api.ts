@@ -147,9 +147,8 @@ export const addContactNote = async ({ contactId, body, businessId }: AddNotePar
 
     const url = `/contacts/${contactId}/notes`;
     const data = {
-      body,
-      contact: contactId,
-      location: settings.location_id
+      userId: contactId,  
+      body
     };
 
     console.log('Sending note to CRM API:', {
@@ -158,7 +157,13 @@ export const addContactNote = async ({ contactId, body, businessId }: AddNotePar
       locationId: settings.location_id
     });
 
-    const response = await api.post(url, data);
+    const response = await api.post(url, data, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Version': '2021-07-28'
+      }
+    });
 
     console.log('CRM API Response:', response.data);
     return response.data;
@@ -169,13 +174,19 @@ export const addContactNote = async ({ contactId, body, businessId }: AddNotePar
         console.error('CRM API 401 Error:', error.response.data);
         throw new Error('שגיאת הרשאות מול ה-CRM. אנא בדוק את הגדרות ה-API Token');
       } else if (error.response?.status === 422) {
-        console.error('CRM API 422 Error:', error.response.data);
+        console.error('CRM API 422 Error:', {
+          data: error.response.data,
+          requestData: data
+        });
         throw new Error('שגיאת וולידציה מול ה-CRM. אנא בדוק את פרטי ההערה');
       } else if (!error.response) {
         console.error('CRM API Network Error:', error.message);
         throw new Error('שגיאת תקשורת מול ה-CRM. אנא נסה שוב מאוחר יותר');
       } else {
-        console.error('CRM API Other Error:', error.response?.data);
+        console.error('CRM API Other Error:', {
+          status: error.response.status,
+          data: error.response.data
+        });
         throw new Error('שגיאה בתקשורת מול ה-CRM. אנא נסה שוב');
       }
     }
