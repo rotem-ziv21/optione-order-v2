@@ -10,6 +10,7 @@ import Customers from './pages/Customers';
 import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
 import BusinessManagement from './pages/BusinessManagement';
+import Admin from './pages/Admin';
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ function AppRoutes() {
         <Route path="customers" element={<Customers />} />
         <Route path="quotes" element={<Quotes />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
     </Routes>
   );

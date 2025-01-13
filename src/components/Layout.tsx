@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, FileText, Settings, LogOut, Building2 } from 'lucide-react';
+import { LayoutDashboard, Package, Users, FileText, Settings, LogOut, Building2, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
-const navItems = [
+const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/businesses', icon: Building2, label: 'עסקים' },
   { to: '/inventory', icon: Package, label: 'מלאי' },
@@ -13,8 +13,22 @@ const navItems = [
   { to: '/settings', icon: Settings, label: 'הגדרות' },
 ];
 
+const adminItem = { to: '/admin', icon: Shield, label: 'ניהול מערכת' };
+
 function Layout() {
   const navigate = useNavigate();
+  const [navItems, setNavItems] = useState(baseNavItems);
+
+  useEffect(() => {
+    checkAdminAccess();
+  }, []);
+
+  const checkAdminAccess = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email === 'rotemziv7766@gmail.com') {
+      setNavItems([...baseNavItems, adminItem]);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
