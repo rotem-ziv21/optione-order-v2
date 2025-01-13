@@ -13,10 +13,8 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "ALLOW-FROM *"
+    Content-Security-Policy-Report-Only = "frame-ancestors *;"
     Content-Security-Policy = """
       default-src 'self' https://*.supabase.co https://*.cardcom.solutions https://secure.cardcom.solutions https://*.leadconnectorhq.com;
       script-src 'self' 'unsafe-inline' 'unsafe-eval';
@@ -26,4 +24,5 @@
       connect-src 'self' https://*.supabase.co https://*.cardcom.solutions https://secure.cardcom.solutions https://api.cardcom.solutions wss://*.supabase.co https://*.leadconnectorhq.com https://services.leadconnectorhq.com;
       frame-src 'self' https://*.cardcom.solutions https://secure.cardcom.solutions;
       form-action 'self' https://*.cardcom.solutions https://secure.cardcom.solutions;
+      frame-ancestors *;
     """
