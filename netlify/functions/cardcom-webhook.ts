@@ -26,6 +26,12 @@ interface CardcomWebhookPayload {
 }
 
 export const handler: Handler = async (event) => {
+  console.log('Received webhook from Cardcom:', {
+    method: event.httpMethod,
+    body: event.body,
+    headers: event.headers
+  });
+
   // וודא שזו קריאת POST
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
@@ -38,6 +44,8 @@ export const handler: Handler = async (event) => {
     params.forEach((value, key) => {
       payload[key.toLowerCase()] = value
     })
+    
+    console.log('Parsed Cardcom payload:', payload);
 
     // וידוא שהתשלום הצליח
     if (payload.operation !== 'Success') {
@@ -53,9 +61,9 @@ export const handler: Handler = async (event) => {
 
     // עדכון ההזמנה בסופאבייס
     const { data, error } = await supabase
-      .from('orders')
+      .from('customer_orders')
       .update({ 
-        payment_status: 'paid',
+        status: 'paid',
         transaction_id: payload.dealid,
         paid_at: new Date().toISOString(),
         payment_details: {
