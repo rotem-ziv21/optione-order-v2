@@ -17,6 +17,9 @@ interface Product {
   currency: string;
   stock: number;
   sku: string;
+  business_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 function Inventory() {
@@ -31,12 +34,29 @@ function Inventory() {
 
   const fetchProducts = async () => {
     try {
+      // Get the current user's business_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      const { data: userBusiness, error: businessError } = await supabase
+        .from('business_staff')
+        .select('business_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+
+      if (businessError) throw businessError;
+      if (!userBusiness) throw new Error('No active business found for user');
+
+      // Fetch products for the current business
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('business_id', userBusiness.business_id)
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.error('Error details:', error);
         throw error;
       }
 
@@ -50,11 +70,32 @@ function Inventory() {
 
   const handleAddProduct = async (data: Omit<Product, 'id'>) => {
     try {
+      // Get the current user's business_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      const { data: userBusiness, error: businessError } = await supabase
+        .from('business_staff')
+        .select('business_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+
+      if (businessError) throw businessError;
+      if (!userBusiness) throw new Error('No active business found for user');
+
+      // Add the product with the business_id
       const { error } = await supabase
         .from('products')
-        .insert([data]);
+        .insert([{
+          ...data,
+          business_id: userBusiness.business_id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
 
       if (error) {
+        console.error('Error details:', error);
         throw error;
       }
 

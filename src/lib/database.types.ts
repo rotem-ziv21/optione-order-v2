@@ -131,6 +131,41 @@ export interface Database {
           created_at?: string
         }
       }
+      products: {
+        Row: {
+          id: string
+          business_id: string
+          name: string
+          sku: string | null
+          price: number
+          currency: string
+          stock: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          name: string
+          sku?: string | null
+          price: number
+          currency: string
+          stock?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          name?: string
+          sku?: string | null
+          price?: number
+          currency?: string
+          stock?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       business_staff_with_users: {
