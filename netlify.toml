@@ -17,4 +17,12 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self' https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*; font-src 'self' data:;"
+    Content-Security-Policy = """
+      default-src 'self' https://*.supabase.co;
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob: https://*;
+      font-src 'self' data:;
+      connect-src 'self' https://*.supabase.co https://*.cardcom.solutions https://secure.cardcom.solutions https://api.cardcom.solutions;
+      frame-src 'self' https://*.cardcom.solutions https://secure.cardcom.solutions;
+    """
