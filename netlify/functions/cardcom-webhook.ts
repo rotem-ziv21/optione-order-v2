@@ -42,17 +42,12 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    // פענוח הפרמטרים שנשלחו מ-Cardcom
-    const params = new URLSearchParams(event.body)
-    const payload: Partial<CardcomWebhookPayload> = {}
-    params.forEach((value, key) => {
-      payload[key.toLowerCase()] = value
-    })
-    
+    // פענוח ה-JSON שהתקבל מ-Cardcom
+    const payload = JSON.parse(event.body)
     console.log('Parsed Cardcom payload:', payload);
 
     // וידוא שהתשלום הצליח
-    if (payload.operation !== 'Success') {
+    if (payload.ResponseCode !== 0) {
       console.error('Payment failed:', payload)
       return {
         statusCode: 200,
@@ -63,29 +58,36 @@ export const handler: Handler = async (event) => {
       }
     }
 
+    // חילוץ מזהה ההזמנה מה-ReturnValue
+    const orderId = payload.ReturnValue
+
     // עדכון ההזמנה בסופאבייס
     const { data, error } = await supabase
       .from('customer_orders')
       .update({ 
         status: 'paid',
-        transaction_id: payload.dealid,
+        transaction_id: payload.TranzactionId?.toString(),
         paid_at: new Date().toISOString(),
         payment_details: {
-          card_type: payload.cardtype,
-          card_issuer: payload.cardissuer,
-          auth_number: payload.authnum,
-          card_mask: payload.cardmask,
-          payments: payload.paymentsnum,
-          terminal_number: payload.terminalnumber
+          card_type: payload.TranzactionInfo?.CardName,
+          card_issuer: payload.TranzactionInfo?.Issuer,
+          auth_number: payload.TranzactionInfo?.ApprovalNumber,
+          card_mask: payload.TranzactionInfo?.Last4CardDigits,
+          payments: payload.TranzactionInfo?.NumberOfPayments,
+          terminal_number: payload.TerminalNumber,
+          amount: payload.TranzactionInfo?.Amount,
+          document_url: payload.DocumentInfo?.DocumentUrl
         }
       })
-      .eq('id', payload.order_id)
+      .eq('id', orderId)
       .select()
 
     if (error) {
       console.error('Error updating order:', error)
       throw error
     }
+
+    console.log('Order updated successfully:', data)
 
     // שליחת תשובה חיובית ל-Cardcom
     return {
