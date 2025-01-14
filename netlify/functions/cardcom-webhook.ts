@@ -98,7 +98,8 @@ export const handler: Handler = async (event) => {
         payment_method: 'credit_card',
         payment_reference: payload.TranzactionInfo?.ApprovalNumber,
         paid_at: new Date().toISOString(),
-        transaction_id: payload.TranzactionId?.toString()
+        transaction_id: payload.TranzactionId?.toString(),
+        receipt_url: payload.DocumentInfo?.DocumentUrl || null
       })
       .eq('id', orderId)
       .select();
@@ -111,7 +112,8 @@ export const handler: Handler = async (event) => {
         payment_method: 'credit_card',
         payment_reference: payload.TranzactionInfo?.ApprovalNumber,
         paid_at: new Date().toISOString(),
-        transaction_id: payload.TranzactionId?.toString()
+        transaction_id: payload.TranzactionId?.toString(),
+        receipt_url: payload.DocumentInfo?.DocumentUrl || null
       });
       throw orderError;
     }
