@@ -101,20 +101,7 @@ export const handler: Handler = async (event) => {
         transaction_id: payload.TranzactionId?.toString()
       })
       .eq('id', orderId)
-      .select(`
-        *,
-        customers (
-          contact_id,
-          name,
-          email
-        ),
-        order_items (
-          quantity,
-          products (
-            name
-          )
-        )
-      `);
+      .select();
 
     if (orderError) {
       console.error('Error updating order:', orderError);
@@ -136,20 +123,51 @@ export const handler: Handler = async (event) => {
 
     console.log('Order updated successfully:', orderData);
 
-    // שליחת הודעה ל-CRM
-    const order = orderData[0];
-    if (order?.customers?.contact_id) {
-      try {
-        console.log('Preparing CRM note for contact:', order.customers.contact_id);
+    // Get customer details in a separate query if needed
+    const { data: customerData, error: customerError } = await supabase
+      .from('customer_orders')
+      .select(`
+        *,
+        customers!inner (
+          contact_id,
+          name,
+          email
+        ),
+        order_items!inner (
+          quantity,
+          products!inner (
+            name
+          )
+        )
+      `)
+      .eq('id', orderId)
+      .single();
 
-        const itemsList = order.order_items
+    if (customerError) {
+      console.error('Error fetching customer details:', customerError);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ 
+          message: 'Payment processed successfully, but failed to send CRM note',
+          orderId,
+          orderData
+        })
+      };
+    }
+
+    // שליחת הודעה ל-CRM
+    if (customerData?.customers?.contact_id) {
+      try {
+        console.log('Preparing CRM note for contact:', customerData.customers.contact_id);
+
+        const itemsList = customerData.order_items
           ?.map(item => `${item.products.name} (${item.quantity})`)
           .join(', ');
 
         const noteBody = `✅ תשלום התקבל בכרטיס אשראי\n` +
-          `סכום: ₪${order.total_amount}\n` +
+          `סכום: ₪${customerData.total_amount}\n` +
           `פריטים: ${itemsList}\n` +
-          `מספר הזמנה: ${order.id}\n` +
+          `מספר הזמנה: ${customerData.id}\n` +
           `מספר אישור: ${payload.TranzactionInfo?.ApprovalNumber}\n` +
           `סוג כרטיס: ${payload.TranzactionInfo?.CardName}\n` +
           `4 ספרות אחרונות: ${payload.TranzactionInfo?.Last4CardDigits}\n` +
@@ -158,14 +176,14 @@ export const handler: Handler = async (event) => {
 
         console.log('Sending note to CRM:', noteBody);
 
-        await addContactNote(order.customers.contact_id, noteBody);
+        await addContactNote(customerData.customers.contact_id, noteBody);
         console.log('CRM note added successfully');
       } catch (crmError) {
         console.error('Error adding CRM note:', crmError);
         // לא נזרוק שגיאה כי התשלום כבר עבר בהצלחה
       }
     } else {
-      console.warn('No contact_id found for order:', order);
+      console.warn('No contact_id found for order:', customerData);
     }
 
     return {
