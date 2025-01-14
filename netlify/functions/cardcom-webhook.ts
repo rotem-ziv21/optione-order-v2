@@ -58,32 +58,35 @@ interface CardcomWebhookPayload {
 }
 
 export const handler: Handler = async (event) => {
-  console.log('Received webhook from Cardcom:', {
-    method: event.httpMethod,
-    body: event.body,
-    headers: event.headers
-  });
-
-  // וודא שזו קריאת POST
+  // בדיקה שזו בקשת POST
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' }
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ message: 'Method not allowed' })
+    };
   }
+
+  console.log('Webhook received:', event.body);
 
   try {
     // פענוח ה-JSON שהתקבל מ-Cardcom
     const payload = JSON.parse(event.body || '{}') as CardcomWebhookPayload;
-    console.log('Received webhook payload:', payload);
+    console.log('Parsed webhook payload:', payload);
+
+    // וידוא שהתשלום הצליח
+    if (payload.ResponseCode !== 0) {
+      console.error('Payment failed:', payload.Description);
+      throw new Error(`Payment failed: ${payload.Description}`);
+    }
 
     // Get order ID from ReturnValue
     const orderId = payload.ReturnValue;
     if (!orderId) {
+      console.error('No order ID in payload');
       throw new Error('Order ID not found in ReturnValue');
     }
 
-    // וידוא שהתשלום הצליח
-    if (payload.ResponseCode !== 0) {
-      throw new Error(`Payment failed: ${payload.Description}`);
-    }
+    console.log('Processing payment for order:', orderId);
 
     // עדכון סטטוס ההזמנה ל-completed
     const { data: orderData, error: orderError } = await supabase
@@ -95,7 +98,7 @@ export const handler: Handler = async (event) => {
         paid_at: new Date().toISOString(),
         transaction_id: payload.TranzactionId?.toString()
       })
-      .eq('id', payload.ReturnValue)
+      .eq('id', orderId)
       .select(`
         *,
         customers (
@@ -120,8 +123,10 @@ export const handler: Handler = async (event) => {
 
     // שליחת הודעה ל-CRM
     const order = orderData?.[0];
-    if (order) {
+    if (order?.customers?.contact_id) {
       try {
+        console.log('Preparing CRM note for contact:', order.customers.contact_id);
+
         const itemsList = order.order_items
           ?.map(item => `${item.products.name} (${item.quantity})`)
           .join(', ');
@@ -136,27 +141,34 @@ export const handler: Handler = async (event) => {
           `מספר תשלומים: ${payload.TranzactionInfo?.NumberOfPayments}\n` +
           `קישור לקבלה: ${payload.DocumentInfo?.DocumentUrl}`;
 
+        console.log('Sending note to CRM:', noteBody);
+
         await addContactNote(order.customers.contact_id, noteBody);
         console.log('CRM note added successfully');
       } catch (crmError) {
         console.error('Error adding CRM note:', crmError);
         // לא נזרוק שגיאה כי התשלום כבר עבר בהצלחה
       }
+    } else {
+      console.warn('No contact_id found for order:', order);
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: 'Payment processed successfully' })
+      body: JSON.stringify({ 
+        message: 'Payment processed successfully',
+        orderId,
+        orderData
+      })
     };
-
   } catch (error) {
-    console.error('Error processing Cardcom webhook:', error)
+    console.error('Error processing webhook:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error processing payment' 
+        message: 'Error processing webhook',
+        error: error instanceof Error ? error.message : 'Unknown error'
       })
-    }
+    };
   }
-}
+};
