@@ -1,6 +1,6 @@
-import { Handler } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
-import { addContactNote } from '../src/lib/crm-api'
+import { Handler } from '@netlify/functions';
+import { createClient } from '@supabase/supabase-js';
+import { addContactNote } from './crm-api';
 
 // יצירת חיבור לסופאבייס
 const supabaseUrl = process.env.SUPABASE_URL
