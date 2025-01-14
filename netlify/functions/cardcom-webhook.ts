@@ -63,7 +63,7 @@ export const handler: Handler = async (event) => {
 
     // עדכון ההזמנה בסופאבייס
     const { data, error } = await supabase
-      .from('customer_orders')
+      .from('orders')
       .update({ 
         status: 'completed'
       })
