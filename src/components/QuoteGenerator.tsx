@@ -136,9 +136,9 @@ interface QuoteGeneratorProps {
 
 export default function QuoteGenerator({ customer, products, onClose }: QuoteGeneratorProps) {
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pdfReady, setPdfReady] = useState(false);
   const validUntil = addDays(new Date(), 30);
 
   const handleSaveQuote = async () => {
@@ -200,7 +200,6 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
       }
 
       setQuoteId(quote.id);
-      setPdfReady(true);
 
       // יצירת פריטי הצעת המחיר
       const quoteItems = products.map(product => ({
@@ -217,9 +216,6 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
 
       if (itemsError) throw itemsError;
 
-      // סגירת החלון ורענון הרשימה
-      onClose();
-      window.location.reload();
     } catch (error) {
       console.error('Error saving quote:', error);
       setError(error instanceof Error ? error.message : 'שגיאה בשמירת הצעת המחיר');
@@ -227,6 +223,40 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
       setSaving(false);
     }
   };
+
+  const handleSendQuote = async () => {
+    if (!quoteId) return;
+    
+    setSending(true);
+    setError(null);
+
+    try {
+      const { error } = await supabase
+        .from('quotes')
+        .update({ status: 'sent' })
+        .eq('id', quoteId);
+
+      if (error) throw error;
+
+      // סגירת החלון ורענון הרשימה
+      onClose();
+      window.location.reload();
+    } catch (error) {
+      console.error('Error sending quote:', error);
+      setError(error instanceof Error ? error.message : 'שגיאה בשליחת הצעת המחיר');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const QuoteDocument = (
+    <QuotePDF 
+      customer={customer} 
+      products={products} 
+      quoteId={quoteId} 
+      validUntil={validUntil}
+    />
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -275,41 +305,44 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
               </div>
             </div>
 
-            {/* PDF Preview */}
+            {/* PDF Preview and Actions */}
             {products.length > 0 && (
               <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">תצוגה מקדימה</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">פעולות</h3>
                 <div className="flex flex-col space-y-4">
-                  {!pdfReady && (
+                  {!quoteId ? (
                     <button
                       onClick={handleSaveQuote}
                       disabled={saving}
-                      className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+                      className="inline-flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                       <Save className="w-5 h-5" />
-                      <span>{saving ? 'שומר...' : 'שמור כדי להוריד PDF'}</span>
+                      <span>{saving ? 'שומר...' : 'שמור הצעת מחיר'}</span>
                     </button>
-                  )}
-                  {pdfReady && (
-                    <PDFDownloadLink
-                      document={
-                        <QuotePDF 
-                          customer={customer} 
-                          products={products} 
-                          quoteId={quoteId} 
-                          validUntil={validUntil}
-                        />
-                      }
-                      fileName={`quote-${quoteId || 'draft'}.pdf`}
-                      className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-                    >
-                      {({ loading }) => (
-                        <>
-                          <Download className="w-5 h-5" />
-                          <span>{loading ? 'טוען...' : 'הורד PDF'}</span>
-                        </>
-                      )}
-                    </PDFDownloadLink>
+                  ) : (
+                    <div className="flex flex-col space-y-4">
+                      <PDFDownloadLink
+                        document={QuoteDocument}
+                        fileName={`quote-${quoteId}.pdf`}
+                        className="inline-flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                      >
+                        {({ loading }) => (
+                          <>
+                            <Download className="w-5 h-5" />
+                            <span>{loading ? 'טוען...' : 'הורד PDF'}</span>
+                          </>
+                        )}
+                      </PDFDownloadLink>
+
+                      <button
+                        onClick={handleSendQuote}
+                        disabled={sending}
+                        className="inline-flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      >
+                        <Send className="w-5 h-5" />
+                        <span>{sending ? 'שולח...' : 'שלח ללקוח'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
