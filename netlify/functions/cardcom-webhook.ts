@@ -65,7 +65,7 @@ export const handler: Handler = async (event) => {
     const { data, error } = await supabase
       .from('customer_orders')
       .update({ 
-        status: 'paid',
+        status: 'payment_completed',
         transaction_id: payload.TranzactionId?.toString(),
         paid_at: new Date().toISOString(),
         payment_details: {
