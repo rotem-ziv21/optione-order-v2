@@ -5,17 +5,43 @@ interface CardcomPaymentModalProps {
   url: string;
   onClose: () => void;
   onSuccess?: () => void;
+  orderId: string;
 }
 
-export default function CardcomPaymentModal({ url, onClose, onSuccess }: CardcomPaymentModalProps) {
+export default function CardcomPaymentModal({ url, onClose, onSuccess, orderId }: CardcomPaymentModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     // Reset states when URL changes
     setError(null);
     setLoading(true);
   }, [url]);
+
+  const handleSuccess = async () => {
+    try {
+      setIsLoading(true);
+      const { data: updatedOrder, error } = await supabase
+        .from('customer_orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+
+      if (error) throw error;
+
+      if (updatedOrder.receipt_url) {
+        window.open(updatedOrder.receipt_url, '_blank');
+      }
+
+      onSuccess();
+    } catch (error) {
+      console.error('Error fetching updated order:', error);
+    } finally {
+      setIsLoading(false);
+      onClose();
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
@@ -47,7 +73,7 @@ export default function CardcomPaymentModal({ url, onClose, onSuccess }: Cardcom
               // בדיקה אם הדף שנטען הוא דף ההצלחה של Cardcom
               const iframe = e.target as HTMLIFrameElement;
               if (iframe.contentWindow?.location.href.includes('Success')) {
-                onSuccess?.();
+                handleSuccess();
               }
             }}
             onError={() => setError('שגיאה בטעינת דף התשלום')}

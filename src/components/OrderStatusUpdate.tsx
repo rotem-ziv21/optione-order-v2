@@ -19,6 +19,36 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
   const [status, setStatus] = useState(currentStatus);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    // טעינת פרטי ההזמנה כולל קישור לחשבונית
+    const fetchOrderDetails = async () => {
+      const { data: order, error } = await supabase
+        .from('customer_orders')
+        .select('receipt_url')
+        .eq('id', orderId)
+        .single();
+
+      if (!error && order?.receipt_url) {
+        setReceiptUrl(order.receipt_url);
+      }
+    };
+
+    fetchOrderDetails();
+  }, [orderId]);
+
+  // האזנה לשינויים בהזמנה
+  useOrderSubscription(orderId, (updatedOrder) => {
+    if (updatedOrder.payment_status === 'paid' && status !== 'paid') {
+      setStatus('paid');
+      if (updatedOrder.receipt_url) {
+        setReceiptUrl(updatedOrder.receipt_url);
+      }
+      toast.success('התשלום התקבל בהצלחה!');
+      onUpdate();
+    }
+  });
 
   const statusOptions = [
     { value: 'pending', label: 'ממתין' },
@@ -26,15 +56,6 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
     { value: 'cancelled', label: 'בוטל' },
     { value: 'paid', label: 'שולם' }
   ];
-
-  // האזנה לשינויים בהזמנה
-  useOrderSubscription(orderId, (updatedOrder) => {
-    if (updatedOrder.payment_status === 'paid' && status !== 'paid') {
-      setStatus('paid');
-      toast.success('התשלום התקבל בהצלחה!');
-      onUpdate();
-    }
-  });
 
   const handleUpdateStatus = async () => {
     if (!orderId || !status) {
@@ -156,6 +177,19 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
               ))}
             </select>
           </div>
+
+          {receiptUrl && (
+            <div className="mt-4">
+              <a
+                href={receiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                צפה בחשבונית
+              </a>
+            </div>
+          )}
 
           {message && (
             <div className={`text-${message.type === 'success' ? 'green' : 'red'}-600 text-sm`}>{message.text}</div>
