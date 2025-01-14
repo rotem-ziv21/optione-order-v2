@@ -45,7 +45,9 @@ interface CardcomWebhookPayload {
     PaymentType: string;
     DealType: string;
   };
-  TerminalNumber: string;
+  TerminalNumber: string | number;
+  LowProfileId: string;
+  Description: string;
   DocumentInfo: {
     DocumentUrl: string;
   };
@@ -71,7 +73,7 @@ export const handler: Handler = async (event) => {
   try {
     // פענוח ה-JSON שהתקבל מ-Cardcom
     const payload = JSON.parse(event.body || '{}') as CardcomWebhookPayload;
-    console.log('Parsed webhook payload:', payload);
+    console.log('Parsed webhook payload:', JSON.stringify(payload, null, 2));
 
     // וידוא שהתשלום הצליח
     if (payload.ResponseCode !== 0) {
@@ -116,13 +118,26 @@ export const handler: Handler = async (event) => {
 
     if (orderError) {
       console.error('Error updating order:', orderError);
+      console.error('Update params:', {
+        orderId,
+        status: 'completed',
+        payment_method: 'credit_card',
+        payment_reference: payload.TranzactionInfo?.ApprovalNumber,
+        paid_at: new Date().toISOString(),
+        transaction_id: payload.TranzactionId?.toString()
+      });
       throw orderError;
+    }
+
+    if (!orderData || orderData.length === 0) {
+      console.error('No order found with ID:', orderId);
+      throw new Error(`Order not found: ${orderId}`);
     }
 
     console.log('Order updated successfully:', orderData);
 
     // שליחת הודעה ל-CRM
-    const order = orderData?.[0];
+    const order = orderData[0];
     if (order?.customers?.contact_id) {
       try {
         console.log('Preparing CRM note for contact:', order.customers.contact_id);
