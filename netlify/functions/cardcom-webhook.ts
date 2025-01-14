@@ -1,5 +1,6 @@
 import { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { addContactNote } from '../src/lib/crm-api'
 
 // יצירת חיבור לסופאבייס
 const supabaseUrl = process.env.SUPABASE_URL
@@ -85,7 +86,7 @@ export const handler: Handler = async (event) => {
     }
 
     // עדכון סטטוס ההזמנה ל-completed
-    const { data, error } = await supabase
+    const { data: orderData, error: orderError } = await supabase
       .from('customer_orders')
       .update({
         status: 'completed',
@@ -95,14 +96,53 @@ export const handler: Handler = async (event) => {
         transaction_id: payload.TranzactionId?.toString()
       })
       .eq('id', payload.ReturnValue)
-      .select();
+      .select(`
+        *,
+        customers (
+          contact_id,
+          name,
+          email
+        ),
+        order_items (
+          quantity,
+          products (
+            name
+          )
+        )
+      `);
 
-    if (error) {
-      console.error('Error updating order:', error);
-      throw error;
+    if (orderError) {
+      console.error('Error updating order:', orderError);
+      throw orderError;
     }
 
-    console.log('Order updated successfully:', data);
+    console.log('Order updated successfully:', orderData);
+
+    // שליחת הודעה ל-CRM
+    const order = orderData?.[0];
+    if (order) {
+      try {
+        const itemsList = order.order_items
+          ?.map(item => `${item.products.name} (${item.quantity})`)
+          .join(', ');
+
+        const noteBody = `✅ תשלום התקבל בכרטיס אשראי\n` +
+          `סכום: ₪${order.total_amount}\n` +
+          `פריטים: ${itemsList}\n` +
+          `מספר הזמנה: ${order.id}\n` +
+          `מספר אישור: ${payload.TranzactionInfo?.ApprovalNumber}\n` +
+          `סוג כרטיס: ${payload.TranzactionInfo?.CardName}\n` +
+          `4 ספרות אחרונות: ${payload.TranzactionInfo?.Last4CardDigits}\n` +
+          `מספר תשלומים: ${payload.TranzactionInfo?.NumberOfPayments}\n` +
+          `קישור לקבלה: ${payload.DocumentInfo?.DocumentUrl}`;
+
+        await addContactNote(order.customers.contact_id, noteBody);
+        console.log('CRM note added successfully');
+      } catch (crmError) {
+        console.error('Error adding CRM note:', crmError);
+        // לא נזרוק שגיאה כי התשלום כבר עבר בהצלחה
+      }
+    }
 
     return {
       statusCode: 200,
