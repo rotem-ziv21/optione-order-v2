@@ -25,6 +25,7 @@ interface Order {
   status: 'pending' | 'completed' | 'cancelled';
   payment_method?: string;
   payment_reference?: string;
+  receipt_url?: string;
   created_at: string;
   items: Array<{
     product_name: string;
@@ -95,6 +96,7 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
           status,
           payment_method,
           payment_reference,
+          receipt_url,
           created_at
         `)
         .eq('customer_id', customer.contact_id)
@@ -216,6 +218,117 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
     }
   };
 
+  const renderOrdersList = () => (
+    <div className="mt-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-medium text-gray-900">היסטוריית הזמנות</h3>
+        {selectedOrders.length > 0 && (
+          <div className="flex space-x-4">
+            <button
+              onClick={handleCreateQuote}
+              className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+            >
+              <FileText className="w-5 h-5" />
+              <span>צור הצעת מחיר מהזמנות שנבחרו</span>
+            </button>
+            <button
+              onClick={handlePayment}
+              className="flex items-center space-x-2 text-green-600 hover:text-green-700"
+            >
+              <CreditCard className="w-5 h-5" />
+              <span>תשלום להזמנות שנבחרו</span>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="space-y-4">
+        {orders.map((order) => (
+          <div 
+            key={order.id} 
+            className={`border rounded-lg p-4 ${
+              selectedOrders.includes(order.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+            }`}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-start space-x-4">
+                {order.status === 'pending' && (
+                  <input
+                    type="checkbox"
+                    checked={selectedOrders.includes(order.id)}
+                    onChange={() => handleOrderSelect(order.id)}
+                    className="mt-1"
+                  />
+                )}
+                <div>
+                  <div className="text-sm text-gray-500">
+                    {format(new Date(order.created_at), 'dd/MM/yyyy')}
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 mt-1">
+                    סכום: {order.currency} {order.total_amount.toFixed(2)}
+                  </div>
+                  {order.payment_method && (
+                    <div className="text-sm text-gray-600 mt-1">
+                      שולם באמצעות: {
+                        order.payment_method === 'bank_transfer' ? 'העברה בנקאית' :
+                        order.payment_method === 'cash' ? 'מזומן' :
+                        order.payment_method === 'check' ? "צ'ק" :
+                        order.payment_method === 'invoice' ? 'חשבונית' :
+                        order.payment_method
+                      }
+                      {order.payment_reference && ` (${order.payment_reference})`}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                'bg-yellow-100 text-yellow-800'
+              }`}>
+                {order.status === 'completed' ? 'שולם' :
+                 order.status === 'cancelled' ? 'בוטל' :
+                 'ממתין לתשלום'}
+              </span>
+            </div>
+            <div className="mt-4">
+              <table className="min-w-full">
+                <thead>
+                  <tr>
+                    <th className="text-right text-xs font-medium text-gray-500">מוצר</th>
+                    <th className="text-right text-xs font-medium text-gray-500">כמות</th>
+                    <th className="text-right text-xs font-medium text-gray-500">מחיר</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((item, index) => (
+                    <tr key={index}>
+                      <td className="text-sm text-gray-900">{item.product_name}</td>
+                      <td className="text-sm text-gray-900">{item.quantity}</td>
+                      <td className="text-sm text-gray-900">
+                        {order.currency} {item.price.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {order.receipt_url && (
+              <a
+                href={order.receipt_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                <FileText className="w-4 h-4 ml-1" />
+                חשבונית
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -309,103 +422,7 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
 
             {/* Orders */}
             {orders.length > 0 && (
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">היסטוריית הזמנות</h3>
-                  {selectedOrders.length > 0 && (
-                    <div className="flex space-x-4">
-                      <button
-                        onClick={handleCreateQuote}
-                        className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-                      >
-                        <FileText className="w-5 h-5" />
-                        <span>צור הצעת מחיר מהזמנות שנבחרו</span>
-                      </button>
-                      <button
-                        onClick={handlePayment}
-                        className="flex items-center space-x-2 text-green-600 hover:text-green-700"
-                      >
-                        <CreditCard className="w-5 h-5" />
-                        <span>תשלום להזמנות שנבחרו</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-4">
-                  {orders.map((order) => (
-                    <div 
-                      key={order.id} 
-                      className={`border rounded-lg p-4 ${
-                        selectedOrders.includes(order.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-start space-x-4">
-                          {order.status === 'pending' && (
-                            <input
-                              type="checkbox"
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleOrderSelect(order.id)}
-                              className="mt-1"
-                            />
-                          )}
-                          <div>
-                            <div className="text-sm text-gray-500">
-                              {format(new Date(order.created_at), 'dd/MM/yyyy')}
-                            </div>
-                            <div className="text-sm font-medium text-gray-900 mt-1">
-                              סכום: {order.currency} {order.total_amount.toFixed(2)}
-                            </div>
-                            {order.payment_method && (
-                              <div className="text-sm text-gray-600 mt-1">
-                                שולם באמצעות: {
-                                  order.payment_method === 'bank_transfer' ? 'העברה בנקאית' :
-                                  order.payment_method === 'cash' ? 'מזומן' :
-                                  order.payment_method === 'check' ? "צ'ק" :
-                                  order.payment_method === 'invoice' ? 'חשבונית' :
-                                  order.payment_method
-                                }
-                                {order.payment_reference && ` (${order.payment_reference})`}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {order.status === 'completed' ? 'שולם' :
-                           order.status === 'cancelled' ? 'בוטל' :
-                           'ממתין לתשלום'}
-                        </span>
-                      </div>
-                      <div className="mt-4">
-                        <table className="min-w-full">
-                          <thead>
-                            <tr>
-                              <th className="text-right text-xs font-medium text-gray-500">מוצר</th>
-                              <th className="text-right text-xs font-medium text-gray-500">כמות</th>
-                              <th className="text-right text-xs font-medium text-gray-500">מחיר</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item, index) => (
-                              <tr key={index}>
-                                <td className="text-sm text-gray-900">{item.product_name}</td>
-                                <td className="text-sm text-gray-900">{item.quantity}</td>
-                                <td className="text-sm text-gray-900">
-                                  {order.currency} {item.price.toFixed(2)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              renderOrdersList()
             )}
 
             {/* Contact Info */}
