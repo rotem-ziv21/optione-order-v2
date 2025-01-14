@@ -65,7 +65,19 @@ export const handler: Handler = async (event) => {
     const { data, error } = await supabase
       .from('customer_orders')
       .update({ 
-        status: 'completed'
+        status: 'completed',
+        paid_at: new Date().toISOString(),
+        transaction_id: payload.TranzactionId?.toString(),
+        payment_details: {
+          card_type: payload.TranzactionInfo?.CardName,
+          card_issuer: payload.TranzactionInfo?.Issuer,
+          auth_number: payload.TranzactionInfo?.ApprovalNumber,
+          card_mask: payload.TranzactionInfo?.Last4CardDigits,
+          payments: payload.TranzactionInfo?.NumberOfPayments,
+          terminal_number: payload.TerminalNumber,
+          amount: payload.TranzactionInfo?.Amount,
+          document_url: payload.DocumentInfo?.DocumentUrl
+        }
       })
       .eq('id', orderId)
       .select()
