@@ -81,65 +81,33 @@ export const handler: Handler = async (event) => {
 
     // וידוא שהתשלום הצליח
     if (payload.ResponseCode !== 0) {
-      console.error('Payment failed:', payload)
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ 
-          success: false, 
-          message: 'Payment operation was not successful' 
-        })
-      }
+      throw new Error(`Payment failed: ${payload.Description}`);
     }
 
-    // עדכון ההזמנה בסופאבייס
+    // עדכון סטטוס ההזמנה ל-completed
     const { data, error } = await supabase
       .from('customer_orders')
       .update({
         status: 'completed',
-        paid_at: new Date().toISOString(),
-        transaction_id: payload.TranZactionId?.toString(),
         payment_method: 'credit_card',
-        payment_reference: payload.TranZactionInfo?.ApprovalNumber,
-        payment_details: {
-          card_type: payload.TranZactionInfo?.CardName,
-          card_issuer: payload.TranZactionInfo?.Issuer,
-          auth_number: payload.TranZactionInfo?.ApprovalNumber,
-          card_mask: payload.TranZactionInfo?.Last4CardDigits,
-          payments: payload.TranZactionInfo?.NumberOfPayments,
-          terminal_number: payload.TerminalNumber,
-          amount: payload.TranZactionInfo?.Amount,
-          document_url: payload.DocumentInfo?.DocumentUrl,
-          card_owner: payload.UIValues?.CardOwnerName,
-          card_owner_phone: payload.UIValues?.CardOwnerPhone,
-          card_owner_email: payload.UIValues?.CardOwnerEmail,
-          card_owner_id: payload.UIValues?.CardOwnerIdentityNumber,
-          transaction_date: payload.TranZactionInfo?.CreateDate,
-          token: payload.TranZactionInfo?.Token,
-          brand: payload.TranZactionInfo?.Brand,
-          acquire: payload.TranZactionInfo?.Acquire,
-          payment_type: payload.TranZactionInfo?.PaymentType,
-          deal_type: payload.TranZactionInfo?.DealType
-        }
+        payment_reference: payload.TranzactionInfo?.ApprovalNumber,
+        paid_at: new Date().toISOString(),
+        transaction_id: payload.TranzactionId?.toString()
       })
       .eq('id', payload.ReturnValue)
-      .select()
+      .select();
 
     if (error) {
-      console.error('Error updating order:', error)
-      throw error
+      console.error('Error updating order:', error);
+      throw error;
     }
 
-    console.log('Order updated successfully:', data)
+    console.log('Order updated successfully:', data);
 
-    // שליחת תשובה חיובית ל-Cardcom
     return {
       statusCode: 200,
-      body: JSON.stringify({ 
-        success: true, 
-        message: 'Payment processed successfully',
-        order: data?.[0]
-      })
-    }
+      body: JSON.stringify({ message: 'Payment processed successfully' })
+    };
 
   } catch (error) {
     console.error('Error processing Cardcom webhook:', error)
