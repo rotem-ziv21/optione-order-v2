@@ -27,6 +27,21 @@ interface CardcomWebhookPayload {
   authnum: string;
   cardmask: string;
   order_id: string;
+  ReturnValue: string;
+  ResponseCode: number;
+  TranZactionId: string;
+  TranZactionInfo: {
+    CardName: string;
+    Issuer: string;
+    ApprovalNumber: string;
+    Last4CardDigits: string;
+    NumberOfPayments: string;
+    Amount: string;
+  };
+  TerminalNumber: string;
+  DocumentInfo: {
+    DocumentUrl: string;
+  };
 }
 
 export const handler: Handler = async (event) => {
@@ -43,8 +58,14 @@ export const handler: Handler = async (event) => {
 
   try {
     // פענוח ה-JSON שהתקבל מ-Cardcom
-    const payload = JSON.parse(event.body)
-    console.log('Parsed Cardcom payload:', payload);
+    const payload = JSON.parse(event.body || '{}') as CardcomWebhookPayload;
+    console.log('Received webhook payload:', payload);
+
+    // Get order ID from ReturnValue
+    const orderId = payload.ReturnValue;
+    if (!orderId) {
+      throw new Error('Order ID not found in ReturnValue');
+    }
 
     // וידוא שהתשלום הצליח
     if (payload.ResponseCode !== 0) {
@@ -58,24 +79,21 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    // חילוץ מזהה ההזמנה מה-ReturnValue
-    const orderId = payload.ReturnValue
-
     // עדכון ההזמנה בסופאבייס
     const { data, error } = await supabase
       .from('customer_orders')
       .update({ 
         status: 'completed',
         paid_at: new Date().toISOString(),
-        transaction_id: payload.TranzactionId?.toString(),
+        transaction_id: payload.TranZactionId?.toString(),
         payment_details: {
-          card_type: payload.TranzactionInfo?.CardName,
-          card_issuer: payload.TranzactionInfo?.Issuer,
-          auth_number: payload.TranzactionInfo?.ApprovalNumber,
-          card_mask: payload.TranzactionInfo?.Last4CardDigits,
-          payments: payload.TranzactionInfo?.NumberOfPayments,
+          card_type: payload.TranZactionInfo?.CardName,
+          card_issuer: payload.TranZactionInfo?.Issuer,
+          auth_number: payload.TranZactionInfo?.ApprovalNumber,
+          card_mask: payload.TranZactionInfo?.Last4CardDigits,
+          payments: payload.TranZactionInfo?.NumberOfPayments,
           terminal_number: payload.TerminalNumber,
-          amount: payload.TranzactionInfo?.Amount,
+          amount: payload.TranZactionInfo?.Amount,
           document_url: payload.DocumentInfo?.DocumentUrl
         }
       })

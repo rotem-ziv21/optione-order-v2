@@ -99,6 +99,7 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
         apiName: settings.cardcom_api_name,
         amount: totalAmount,
         payments,
+        orderId: orders[0].id, // שימוש במזהה ההזמנה הראשונה
         successUrl: `${window.location.origin}/customers?payment=success&orders=${orders.map(o => o.id).join(',')}`,
         failureUrl: `${window.location.origin}/customers?payment=failure`,
         customer: {

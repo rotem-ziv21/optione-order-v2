@@ -97,7 +97,7 @@ export const createPaymentPage = async ({
     const requestBody = {
       TerminalNumber: terminalNumber,
       ApiName: apiName,
-      ReturnValue: "Z12332X",
+      ReturnValue: orderId || "Z12332X",
       Amount: formattedAmount,
       MaxPayments: payments,
       SuccessRedirectUrl: successUrl,
