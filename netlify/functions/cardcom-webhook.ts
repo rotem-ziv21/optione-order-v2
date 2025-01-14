@@ -37,10 +37,22 @@ interface CardcomWebhookPayload {
     Last4CardDigits: string;
     NumberOfPayments: string;
     Amount: string;
+    CreateDate: string;
+    Token: string;
+    Brand: string;
+    Acquire: string;
+    PaymentType: string;
+    DealType: string;
   };
   TerminalNumber: string;
   DocumentInfo: {
     DocumentUrl: string;
+  };
+  UIValues: {
+    CardOwnerName: string;
+    CardOwnerPhone: string;
+    CardOwnerEmail: string;
+    CardOwnerIdentityNumber: string;
   };
 }
 
@@ -82,10 +94,12 @@ export const handler: Handler = async (event) => {
     // עדכון ההזמנה בסופאבייס
     const { data, error } = await supabase
       .from('customer_orders')
-      .update({ 
+      .update({
         status: 'completed',
         paid_at: new Date().toISOString(),
         transaction_id: payload.TranZactionId?.toString(),
+        payment_method: 'credit_card',
+        payment_reference: payload.TranZactionInfo?.ApprovalNumber,
         payment_details: {
           card_type: payload.TranZactionInfo?.CardName,
           card_issuer: payload.TranZactionInfo?.Issuer,
@@ -94,10 +108,20 @@ export const handler: Handler = async (event) => {
           payments: payload.TranZactionInfo?.NumberOfPayments,
           terminal_number: payload.TerminalNumber,
           amount: payload.TranZactionInfo?.Amount,
-          document_url: payload.DocumentInfo?.DocumentUrl
+          document_url: payload.DocumentInfo?.DocumentUrl,
+          card_owner: payload.UIValues?.CardOwnerName,
+          card_owner_phone: payload.UIValues?.CardOwnerPhone,
+          card_owner_email: payload.UIValues?.CardOwnerEmail,
+          card_owner_id: payload.UIValues?.CardOwnerIdentityNumber,
+          transaction_date: payload.TranZactionInfo?.CreateDate,
+          token: payload.TranZactionInfo?.Token,
+          brand: payload.TranZactionInfo?.Brand,
+          acquire: payload.TranZactionInfo?.Acquire,
+          payment_type: payload.TranZactionInfo?.PaymentType,
+          deal_type: payload.TranZactionInfo?.DealType
         }
       })
-      .eq('id', orderId)
+      .eq('id', payload.ReturnValue)
       .select()
 
     if (error) {
