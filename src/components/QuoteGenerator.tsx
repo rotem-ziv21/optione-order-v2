@@ -138,6 +138,7 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
   const [saving, setSaving] = useState(false);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pdfReady, setPdfReady] = useState(false);
   const validUntil = addDays(new Date(), 30);
 
   const handleSaveQuote = async () => {
@@ -187,7 +188,7 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
           valid_until: validUntil.toISOString(),
           status: 'draft',
           business_id: business.id,
-          created_by: user.id // הוספת מזהה היוצר
+          created_by: user.id
         }])
         .select()
         .single();
@@ -199,6 +200,7 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
       }
 
       setQuoteId(quote.id);
+      setPdfReady(true);
 
       // יצירת פריטי הצעת המחיר
       const quoteItems = products.map(product => ({
@@ -277,53 +279,51 @@ export default function QuoteGenerator({ customer, products, onClose }: QuoteGen
             {products.length > 0 && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">תצוגה מקדימה</h3>
-                <PDFDownloadLink
-                  document={
-                    <QuotePDF 
-                      customer={customer} 
-                      products={products} 
-                      quoteId={quoteId} 
-                      validUntil={validUntil}
-                    />
-                  }
-                  fileName={`quote-${quoteId || 'draft'}.pdf`}
-                  className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-                >
-                  {({ loading }) => (
-                    <>
-                      <Download className="w-5 h-5" />
-                      <span>{loading ? 'טוען...' : 'הורד PDF'}</span>
-                    </>
+                <div className="flex flex-col space-y-4">
+                  {!pdfReady && (
+                    <button
+                      onClick={handleSaveQuote}
+                      disabled={saving}
+                      className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+                    >
+                      <Save className="w-5 h-5" />
+                      <span>{saving ? 'שומר...' : 'שמור כדי להוריד PDF'}</span>
+                    </button>
                   )}
-                </PDFDownloadLink>
+                  {pdfReady && (
+                    <PDFDownloadLink
+                      document={
+                        <QuotePDF 
+                          customer={customer} 
+                          products={products} 
+                          quoteId={quoteId} 
+                          validUntil={validUntil}
+                        />
+                      }
+                      fileName={`quote-${quoteId || 'draft'}.pdf`}
+                      className="inline-flex items-center space-x-2 text-blue-600 hover:text-blue-700"
+                    >
+                      {({ loading }) => (
+                        <>
+                          <Download className="w-5 h-5" />
+                          <span>{loading ? 'טוען...' : 'הורד PDF'}</span>
+                        </>
+                      )}
+                    </PDFDownloadLink>
+                  )}
+                </div>
               </div>
             )}
-
-            {/* Actions */}
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                סגור
-              </button>
-              <button
-                onClick={handleSaveQuote}
-                disabled={saving || products.length === 0}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Save className="w-5 h-5" />
-                <span>{saving ? 'שומר...' : 'שמור הצעת מחיר'}</span>
-              </button>
-              <button
-                disabled={!quoteId || saving}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700 disabled:opacity-50"
-              >
-                <Send className="w-5 h-5" />
-                <span>שלח ללקוח</span>
-              </button>
-            </div>
           </div>
+        </div>
+
+        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-800"
+          >
+            סגור
+          </button>
         </div>
       </div>
     </div>
