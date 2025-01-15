@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { X, Plus, Minus } from 'lucide-react';
+import { X, Plus, Minus, Download } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { supabase } from '../lib/supabase';
 import QuoteGenerator from './QuoteGenerator';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import PriceQuotePDF from './PriceQuotePDF';
 
 const customerProductSchema = z.object({
   products: z.array(z.object({
@@ -127,13 +129,51 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
         <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">הוספת מוצרים ללקוח</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-500"
-              disabled={submitting}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex gap-2">
+              {selectedProducts.length > 0 && (
+                <PDFDownloadLink
+                  document={
+                    <PriceQuotePDF
+                      customerName={customerDetails?.name || ''}
+                      products={selectedProducts.map(sp => {
+                        const product = products.find(p => p.id === sp.id);
+                        return {
+                          id: product?.id || '',
+                          name: product?.name || '',
+                          price: product?.price || 0,
+                          currency: product?.currency || 'ILS',
+                          quantity: sp.quantity
+                        };
+                      })}
+                      businessDetails={{
+                        name: '',
+                        address: '',
+                        phone: '',
+                        email: ''
+                      }}
+                    />
+                  }
+                  fileName={`הצעת_מחיר_${customerDetails?.name}_${new Date().toLocaleDateString()}.pdf`}
+                >
+                  {({ blob, url, loading, error }) => (
+                    <button
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 disabled:bg-gray-400"
+                      disabled={loading}
+                    >
+                      <Download className="w-5 h-5" />
+                      {loading ? 'מכין PDF...' : 'הורד הצעת מחיר'}
+                    </button>
+                  )}
+                </PDFDownloadLink>
+              )}
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-500"
+                disabled={submitting}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <form className="p-6 space-y-6">
