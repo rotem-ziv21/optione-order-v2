@@ -33,6 +33,12 @@ function Inventory() {
     fetchProducts();
   }, []);
 
+  // Filter products based on search term
+  const filteredProducts = products.filter(product => 
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.sku.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const fetchProducts = async () => {
     try {
       // Get the current user's business_id
@@ -198,35 +204,43 @@ function Inventory() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => (
-              <tr key={product.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className="text-sm text-gray-500">{product.sku}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className="text-sm text-gray-900">
-                    {currencySymbols[product.currency]}{product.price}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className="text-sm text-gray-900">{product.stock}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
-                  <button 
-                    onClick={() => setEditingProduct(product)}
-                    className="text-blue-600 hover:text-blue-900 mr-3"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </button>
-                  <button className="text-red-600 hover:text-red-900">
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+            {filteredProducts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  {searchTerm ? 'לא נמצאו מוצרים התואמים לחיפוש' : 'אין מוצרים להצגה'}
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredProducts.map((product) => (
+                <tr key={product.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-500">{product.sku}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">
+                      {currencySymbols[product.currency]}{product.price}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="text-sm text-gray-900">{product.stock}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
+                    <button 
+                      onClick={() => setEditingProduct(product)}
+                      className="text-blue-600 hover:text-blue-900 mr-3"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button className="text-red-600 hover:text-red-900">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

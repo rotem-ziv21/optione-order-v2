@@ -261,6 +261,18 @@ export default function Customers() {
     setShowDetails(true);
   };
 
+  // Filter customers based on search term
+  const filteredCustomers = customers.filter(customer => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (customer.name?.toLowerCase().includes(searchLower) || false) ||
+      (customer.email?.toLowerCase().includes(searchLower) || false) ||
+      (customer.contact_id?.toLowerCase().includes(searchLower) || false)
+    );
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -281,6 +293,7 @@ export default function Customers() {
             className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            dir="rtl"
           />
         </div>
         <button 
@@ -315,45 +328,53 @@ export default function Customers() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {customers.map((customer) => {
-              const customerOrdersList = customerOrders[customer.contact_id] || [];
-              const totalSpent = customerOrdersList.reduce((sum, order) => sum + order.total_amount, 0);
-              
-              return (
-                <tr key={customer.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div 
-                      className="cursor-pointer hover:text-blue-600"
-                      onClick={() => handleCustomerClick(customer)}
-                    >
-                      <div className="text-sm font-medium text-gray-900">{customer.name}</div>
-                      <div className="text-sm text-gray-500">{customer.email}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">{customer.contact_id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">{customerOrdersList.length}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">₪{totalSpent.toFixed(2)}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button 
-                      onClick={() => {
-                        setSelectedCustomer(customer);
-                        setShowProductForm(true);
-                      }}
-                      className="text-blue-600 hover:text-blue-900 ml-3"
-                      title="הוספת מוצרים"
-                    >
-                      <ShoppingBag className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {filteredCustomers.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  {searchTerm ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+                </td>
+              </tr>
+            ) : (
+              filteredCustomers.map((customer) => {
+                const customerOrdersList = customerOrders[customer.contact_id] || [];
+                const totalSpent = customerOrdersList.reduce((sum, order) => sum + order.total_amount, 0);
+                
+                return (
+                  <tr key={customer.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div 
+                        className="cursor-pointer hover:text-blue-600"
+                        onClick={() => handleCustomerClick(customer)}
+                      >
+                        <div className="text-sm font-medium text-gray-900">{customer.name}</div>
+                        <div className="text-sm text-gray-500">{customer.email}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-sm text-gray-900">{customer.contact_id}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-sm text-gray-900">{customerOrdersList.length}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="text-sm text-gray-900">₪{totalSpent.toFixed(2)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button 
+                        onClick={() => {
+                          setSelectedCustomer(customer);
+                          setShowProductForm(true);
+                        }}
+                        className="text-blue-600 hover:text-blue-900 ml-3"
+                        title="הוספת מוצרים"
+                      >
+                        <ShoppingBag className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
