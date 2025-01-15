@@ -6,6 +6,8 @@ import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } fro
 import { DateRange } from 'react-day-picker';
 import DateRangeFilter from '../components/DateRangeFilter';
 import StaffStats from '../components/StaffStats';
+import { utils, writeFile } from 'xlsx';
+import { Download } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -23,6 +25,20 @@ interface TopProduct {
   revenue: number;
 }
 
+interface SalesData {
+  id: string;
+  created_at: string;
+  total_amount: number;
+  currency: string;
+  status: string;
+  customer_name: string;
+  items: Array<{
+    product_name: string;
+    quantity: number;
+    price_at_time: number;
+  }>;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
@@ -35,9 +51,13 @@ export default function Dashboard() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
+    getCurrentBusiness();
   }, [dateRange]);
 
   const fetchDashboardData = async () => {
@@ -156,6 +176,196 @@ export default function Dashboard() {
       setTopProducts(topProducts);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentBusiness = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
+        const { data: businesses } = await supabase
+          .from('businesses')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        if (businesses) {
+          setCurrentBusinessId(businesses.id);
+        }
+      } else {
+        const { data: staffBusiness } = await supabase
+          .from('business_staff')
+          .select('business_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        if (staffBusiness) {
+          setCurrentBusinessId(staffBusiness.business_id);
+        }
+      }
+    } catch (error) {
+      console.error('Error getting current business:', error);
+    }
+  };
+
+  const fetchSalesData = async (start: string, end: string): Promise<SalesData[]> => {
+    if (!currentBusinessId || !start || !end) return [];
+
+    try {
+      console.log('Fetching sales data with:', { start, end, currentBusinessId });
+      
+      // Fetch orders
+      const { data: orders, error: ordersError } = await supabase
+        .from('customer_orders')
+        .select(`
+          id,
+          created_at,
+          total_amount,
+          currency,
+          status,
+          customer_id
+        `)
+        .eq('business_id', currentBusinessId)
+        .gte('created_at', `${start}`)
+        .lte('created_at', `${end}`)
+        .order('created_at', { ascending: false });
+
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError);
+        throw ordersError;
+      }
+      console.log('Orders:', orders);
+
+      if (!orders || orders.length === 0) {
+        console.log('No orders found for the selected date range');
+        return [];
+      }
+
+      // Fetch customers separately
+      const { data: customers, error: customersError } = await supabase
+        .from('customers')
+        .select('contact_id, name')
+        .in('contact_id', orders.map(order => order.customer_id));
+
+      if (customersError) {
+        console.error('Error fetching customers:', customersError);
+        throw customersError;
+      }
+      console.log('Customers:', customers);
+
+      // Create a map of customer IDs to names
+      const customerMap = new Map(
+        customers?.map(customer => [customer.contact_id, customer.name]) || []
+      );
+
+      // Fetch order items with product details
+      const { data: orderItems, error: itemsError } = await supabase
+        .from('order_items')
+        .select(`
+          order_id,
+          quantity,
+          price_at_time,
+          currency,
+          product_id,
+          products (
+            name
+          )
+        `)
+        .in('order_id', orders.map(order => order.id));
+
+      if (itemsError) {
+        console.error('Error fetching order items:', itemsError);
+        throw itemsError;
+      }
+      console.log('Order items:', orderItems);
+
+      // Combine the data
+      const salesData = orders.map(order => ({
+        id: order.id,
+        created_at: order.created_at,
+        total_amount: order.total_amount,
+        currency: order.currency,
+        status: order.status,
+        customer_name: customerMap.get(order.customer_id) || 'לא ידוע',
+        items: (orderItems || [])
+          .filter(item => item.order_id === order.id)
+          .map(item => ({
+            product_name: item.products?.name || '',
+            quantity: item.quantity,
+            price_at_time: item.price_at_time
+          }))
+      }));
+
+      console.log('Final sales data:', salesData);
+      return salesData;
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      return [];
+    }
+  };
+
+  const downloadExcel = async () => {
+    if (!startDate || !endDate) {
+      alert('נא לבחור טווח תאריכים');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Selected date range:', { startDate, endDate });
+      const salesData = await fetchSalesData(startDate, endDate);
+      
+      if (salesData.length === 0) {
+        alert('לא נמצאו נתונים בטווח התאריכים שנבחר');
+        return;
+      }
+
+      // Prepare data for Excel
+      const excelData = salesData.flatMap(sale => 
+        sale.items.map(item => ({
+          'תאריך': format(new Date(sale.created_at), 'dd/MM/yyyy'),
+          'מספר הזמנה': sale.id,
+          'שם לקוח': sale.customer_name,
+          'שם מוצר': item.product_name,
+          'כמות': item.quantity,
+          'מחיר ליחידה': item.price_at_time,
+          'סה"כ למוצר': item.quantity * item.price_at_time,
+          'סטטוס': sale.status === 'completed' ? 'הושלם' : 
+                   sale.status === 'pending' ? 'ממתין' : 'בוטל',
+          'מטבע': sale.currency
+        }))
+      );
+
+      // Create workbook
+      const wb = utils.book_new();
+      const ws = utils.json_to_sheet(excelData, {
+        header: [
+          'תאריך',
+          'מספר הזמנה',
+          'שם לקוח',
+          'שם מוצר',
+          'כמות',
+          'מחיר ליחידה',
+          'סה"כ למוצר',
+          'סטטוס',
+          'מטבע'
+        ]
+      });
+
+      // Add worksheet to workbook
+      utils.book_append_sheet(wb, ws, 'מכירות');
+
+      // Save file
+      const fileName = `דוח_מכירות_${format(new Date(startDate), 'dd-MM-yyyy')}_עד_${format(new Date(endDate), 'dd-MM-yyyy')}.xlsx`;
+      writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      alert('אירעה שגיאה בהורדת הקובץ');
     } finally {
       setLoading(false);
     }
@@ -297,6 +507,38 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm">
+        <h2 className="text-xl font-semibold mb-4">הורדת דוח מכירות</h2>
+        <div className="flex items-end gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">מתאריך</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="block w-40 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">עד תאריך</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="block w-40 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <button
+            onClick={downloadExcel}
+            disabled={loading || !startDate || !endDate}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            <Download className="w-5 h-5" />
+            {loading ? 'מוריד...' : 'הורד דוח אקסל'}
+          </button>
         </div>
       </div>
 
