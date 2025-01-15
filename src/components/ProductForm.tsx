@@ -5,20 +5,20 @@ import { z } from 'zod';
 import { supabase } from '../lib/supabase';
 
 const currencies = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'ILS', symbol: '₪', name: 'Israeli Shekel' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' }
+  { code: 'USD', symbol: '$', name: 'דולר אמריקאי' },
+  { code: 'EUR', symbol: '€', name: 'אירו' },
+  { code: 'ILS', symbol: '₪', name: 'שקל' },
+  { code: 'GBP', symbol: '£', name: 'לירה שטרלינג' }
 ] as const;
 
 const productSchema = z.object({
-  name: z.string().min(1, 'Product name is required'),
-  sku: z.string().min(1, 'SKU is required'),
-  price: z.number().min(0, 'Price must be positive'),
+  name: z.string().min(1, 'שם המוצר הוא שדה חובה'),
+  sku: z.string().min(1, 'מק"ט הוא שדה חובה'),
+  price: z.number().min(0, 'המחיר חייב להיות חיובי'),
   currency: z.enum(['USD', 'EUR', 'ILS', 'GBP'], {
-    required_error: 'Please select a currency',
+    required_error: 'נא לבחור מטבע',
   }),
-  stock: z.number().min(0, 'Stock must be non-negative'),
+  stock: z.number().min(0, 'המלאי חייב להיות חיובי'),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -26,11 +26,13 @@ type ProductFormData = z.infer<typeof productSchema>;
 interface ProductFormProps {
   onClose: () => void;
   onSubmit: (data: ProductFormData) => void;
+  initialData?: ProductFormData;
+  mode?: 'create' | 'edit';
 }
 
-export default function ProductForm({ onClose, onSubmit }: ProductFormProps) {
+export default function ProductForm({ onClose, onSubmit, initialData, mode = 'create' }: ProductFormProps) {
   const { register, handleSubmit, formState: { errors }, setError } = useForm<ProductFormData>({
-    defaultValues: {
+    defaultValues: initialData || {
       currency: 'ILS'
     }
   });
@@ -42,30 +44,32 @@ export default function ProductForm({ onClose, onSubmit }: ProductFormProps) {
     setServerError(null);
 
     try {
-      // Check if SKU already exists
-      const { data: existingProducts, error: checkError } = await supabase
-        .from('products')
-        .select('id')
-        .eq('sku', data.sku);
+      // Check if SKU already exists only in create mode
+      if (mode === 'create') {
+        const { data: existingProducts, error: checkError } = await supabase
+          .from('products')
+          .select('id')
+          .eq('sku', data.sku);
 
-      if (checkError) {
-        throw checkError;
-      }
+        if (checkError) {
+          throw checkError;
+        }
 
-      if (existingProducts && existingProducts.length > 0) {
-        setError('sku', {
-          type: 'manual',
-          message: 'This SKU is already in use. Please choose a different one.'
-        });
-        setSubmitting(false);
-        return;
+        if (existingProducts && existingProducts.length > 0) {
+          setError('sku', {
+            type: 'manual',
+            message: 'מק"ט זה כבר בשימוש. נא לבחור מק"ט אחר.'
+          });
+          setSubmitting(false);
+          return;
+        }
       }
 
       await onSubmit(data);
       onClose();
     } catch (error) {
-      console.error('Error adding product:', error);
-      setServerError('An error occurred while adding the product. Please try again.');
+      console.error('Error handling product:', error);
+      setServerError('אירעה שגיאה. נא לנסות שוב.');
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +79,9 @@ export default function ProductForm({ onClose, onSubmit }: ProductFormProps) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Add New Product</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {mode === 'create' ? 'הוספת מוצר חדש' : 'עריכת מוצר'}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500"
@@ -94,13 +100,14 @@ export default function ProductForm({ onClose, onSubmit }: ProductFormProps) {
 
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-              Product Name
+              שם המוצר
             </label>
             <input
               type="text"
               id="name"
               {...register('name')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              dir="rtl"
             />
             {errors.name && (
               <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
@@ -109,87 +116,99 @@ export default function ProductForm({ onClose, onSubmit }: ProductFormProps) {
 
           <div>
             <label htmlFor="sku" className="block text-sm font-medium text-gray-700">
-              SKU
+              מק"ט
             </label>
             <input
               type="text"
               id="sku"
               {...register('sku')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              disabled={mode === 'edit'}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+              dir="rtl"
             />
             {errors.sku && (
               <p className="mt-1 text-sm text-red-600">{errors.sku.message}</p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="price" className="block text-sm font-medium text-gray-700">
-                Price
-              </label>
-              <input
-                type="number"
-                id="price"
-                step="0.01"
-                {...register('price', { valueAsNumber: true })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-              {errors.price && (
-                <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
-              )}
-            </div>
+          <div>
+            <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+              מחיר
+            </label>
+            <input
+              type="number"
+              id="price"
+              step="0.01"
+              {...register('price', { valueAsNumber: true })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              dir="rtl"
+            />
+            {errors.price && (
+              <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
+            )}
+          </div>
 
-            <div>
-              <label htmlFor="currency" className="block text-sm font-medium text-gray-700">
-                Currency
-              </label>
-              <select
-                id="currency"
-                {...register('currency')}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                {currencies.map(currency => (
-                  <option key={currency.code} value={currency.code}>
-                    {currency.symbol} {currency.code} - {currency.name}
-                  </option>
-                ))}
-              </select>
-              {errors.currency && (
-                <p className="mt-1 text-sm text-red-600">{errors.currency.message}</p>
-              )}
-            </div>
+          <div>
+            <label htmlFor="currency" className="block text-sm font-medium text-gray-700">
+              מטבע
+            </label>
+            <select
+              id="currency"
+              {...register('currency')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              dir="rtl"
+            >
+              {currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.name} ({currency.symbol})
+                </option>
+              ))}
+            </select>
+            {errors.currency && (
+              <p className="mt-1 text-sm text-red-600">{errors.currency.message}</p>
+            )}
           </div>
 
           <div>
             <label htmlFor="stock" className="block text-sm font-medium text-gray-700">
-              Stock
+              מלאי
             </label>
             <input
               type="number"
               id="stock"
               {...register('stock', { valueAsNumber: true })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              dir="rtl"
             />
             {errors.stock && (
               <p className="mt-1 text-sm text-red-600">{errors.stock.message}</p>
             )}
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
+          <div className="flex justify-end mt-6 space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Cancel
+              ביטול
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
+              className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-5 h-5" />
-              <span>{submitting ? 'Adding...' : 'Add Product'}</span>
+              {submitting ? (
+                <span className="inline-flex items-center">
+                  <svg className="w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  שומר...
+                </span>
+              ) : (
+                'שמור'
+              )}
             </button>
           </div>
         </form>
