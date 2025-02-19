@@ -1,21 +1,24 @@
 [build]
-  command = "npm run build"
+  command = "CI=false NODE_ENV=production npm run build"
   publish = "dist"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 [build.environment]
   NODE_VERSION = "18"
+  CI = "false"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# הגדרת Background Function ספציפית ל-webhook processor
+[functions."process-webhooks"]
+  background = true
+  included_files = ["netlify/functions/process-webhooks/*"]
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "ALLOW-FROM *"
-    Content-Security-Policy-Report-Only = "frame-ancestors *;"
-    Content-Security-Policy = """
+    Content-Security-Policy = '''
       default-src 'self' https://*.supabase.co https://*.cardcom.solutions https://secure.cardcom.solutions https://*.leadconnectorhq.com https://fonts.gstatic.com;
       script-src 'self' 'unsafe-inline' 'unsafe-eval';
       style-src 'self' 'unsafe-inline';
@@ -25,4 +28,11 @@
       frame-src 'self' https://*.cardcom.solutions https://secure.cardcom.solutions;
       form-action 'self' https://*.cardcom.solutions https://secure.cardcom.solutions;
       frame-ancestors *;
-    """
+    '''
+    Content-Security-Policy-Report-Only = "frame-ancestors *"
+    X-Frame-Options = "ALLOW-FROM *"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
