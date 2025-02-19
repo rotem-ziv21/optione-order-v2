@@ -11,7 +11,7 @@ import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
 import BusinessManagement from './pages/BusinessManagement';
 import Admin from './pages/Admin';
-import Automations from './pages/Automations';
+import Automations from './pages/automations';
 import Staff from './pages/Staff';
 import { Toaster } from 'react-hot-toast';
 
@@ -47,78 +47,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route
-          index
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="businesses"
-          element={
-            <ProtectedRoute>
-              <BusinessManagement />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="inventory"
-          element={
-            <ProtectedRoute>
-              <Inventory />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="customers"
-          element={
-            <ProtectedRoute>
-              <Customers />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="quotes"
-          element={
-            <ProtectedRoute>
-              <Quotes />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="admin"
-          element={
-            <ProtectedRoute>
-              <Admin />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="automations"
-          element={
-            <ProtectedRoute>
-              <Automations />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="staff"
-          element={
-            <ProtectedRoute>
-              <Staff />
-            </ProtectedRoute>
-          }
-        />
+        <Route index element={<Dashboard />} />
+        <Route path="businesses" element={<BusinessManagement />} />
+        <Route path="inventory" element={<Inventory />} />
+        <Route path="customers" element={<Customers />} />
+        <Route path="quotes" element={<Quotes />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="admin" element={<Admin />} />
+        <Route path="automations" element={<Automations />} />
+        <Route path="staff" element={<Staff />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
