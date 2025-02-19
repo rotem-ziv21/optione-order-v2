@@ -91,12 +91,24 @@ export const handler: Handler = async (event) => {
     console.log('Processing payment for order:', orderId);
 
     const updateParams = {
-      payment_status: 'paid',
+      status: 'completed',
       payment_method: 'credit_card',
       payment_reference: payload.TranZactionInfo?.ApprovalNumber,
       paid_at: new Date().toISOString(),
       transaction_id: payload.TranZactionId?.toString(),
-      receipt_url: payload.DocumentInfo?.DocumentUrl
+      receipt_url: payload.DocumentInfo?.DocumentUrl,
+      payment_details: {
+        cardOwnerName: payload.UIValues?.CardOwnerName,
+        cardOwnerPhone: payload.UIValues?.CardOwnerPhone,
+        cardOwnerEmail: payload.UIValues?.CardOwnerEmail,
+        cardOwnerIdentityNumber: payload.UIValues?.CardOwnerIdentityNumber,
+        cardMask: payload.TranZactionInfo?.Last4CardDigits,
+        cardBrand: payload.TranZactionInfo?.Brand,
+        cardIssuer: payload.TranZactionInfo?.Issuer,
+        paymentType: payload.TranZactionInfo?.PaymentType,
+        dealType: payload.TranZactionInfo?.DealType,
+        numberOfPayments: payload.TranZactionInfo?.NumberOfPayments
+      }
     };
 
     console.log('Update params:', updateParams);
