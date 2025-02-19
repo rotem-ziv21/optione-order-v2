@@ -11,6 +11,8 @@ import Quotes from './pages/Quotes';
 import Settings from './pages/Settings';
 import BusinessManagement from './pages/BusinessManagement';
 import Admin from './pages/Admin';
+import Automations from './pages/Automations';
+import Staff from './pages/Staff';
 import { Toaster } from 'react-hot-toast';
 
 const queryClient = new QueryClient();
@@ -37,19 +39,88 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<Dashboard />} />
-        <Route path="businesses" element={<BusinessManagement />} />
-        <Route path="inventory" element={<Inventory />} />
-        <Route path="customers" element={<Customers />} />
-        <Route path="quotes" element={<Quotes />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="admin" element={<Admin />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route
+          index
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="businesses"
+          element={
+            <ProtectedRoute>
+              <BusinessManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="inventory"
+          element={
+            <ProtectedRoute>
+              <Inventory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="customers"
+          element={
+            <ProtectedRoute>
+              <Customers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="quotes"
+          element={
+            <ProtectedRoute>
+              <Quotes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin"
+          element={
+            <ProtectedRoute>
+              <Admin />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="automations"
+          element={
+            <ProtectedRoute>
+              <Automations />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="staff"
+          element={
+            <ProtectedRoute>
+              <Staff />
+            </ProtectedRoute>
+          }
+        />
       </Route>
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }
@@ -59,10 +130,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <QueryClientProvider client={queryClient}>
-            <Toaster position="top-center" reverseOrder={false} />
-            <AppRoutes />
-          </QueryClientProvider>
+          <Toaster position="top-center" reverseOrder={false} />
+          <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
