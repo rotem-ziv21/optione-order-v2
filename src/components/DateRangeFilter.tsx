@@ -2,12 +2,12 @@ import React from 'react';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { DateRange, DayPicker } from 'react-day-picker';
-import 'react-day-picker/dist/style.css';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
 
 interface DateRangeFilterProps {
-  dateRange: DateRange | undefined;
-  onDateRangeChange: (range: DateRange | undefined) => void;
+  dateRange: { startDate: Date | null; endDate: Date | null } | undefined;
+  onDateRangeChange: (range: { startDate: Date | null; endDate: Date | null } | undefined) => void;
 }
 
 export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRangeFilterProps) {
@@ -15,21 +15,22 @@ export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRa
 
   console.log('DateRangeFilter props:', { dateRange, isOpen });
 
-  const formatDateRange = (range: DateRange | undefined) => {
-    if (!range?.from) {
+  const formatDateRange = (range: { startDate: Date | null; endDate: Date | null } | undefined) => {
+    if (!range?.startDate) {
       return 'בחר תאריכים';
     }
 
-    if (!range.to) {
-      return format(range.from, 'd בMMMM yyyy', { locale: he });
+    if (!range.endDate) {
+      return format(range.startDate, 'dd/MM/yyyy', { locale: he });
     }
 
-    return `${format(range.from, 'd בMMMM yyyy', { locale: he })} - ${format(range.to, 'd בMMMM yyyy', { locale: he })}`;
+    return `${format(range.startDate, 'dd/MM/yyyy', { locale: he })} - ${format(range.endDate, 'dd/MM/yyyy', { locale: he })}`;
   };
 
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
       >
@@ -48,46 +49,18 @@ export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRa
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <DayPicker
-              mode="range"
-              selected={dateRange}
-              onSelect={(range) => {
-                onDateRangeChange(range);
-                if (range?.to) {
-                  setIsOpen(false);
-                }
+            <DatePicker
+              selected={dateRange?.startDate}
+              onChange={(dates) => {
+                const [start, end] = dates;
+                onDateRangeChange({ startDate: start, endDate: end });
               }}
+              startDate={dateRange?.startDate}
+              endDate={dateRange?.endDate}
+              selectsRange
+              inline
               locale={he}
-              showOutsideDays
-              fixedWeeks
-              className="bg-white rdp-dir-rtl"
-              dir="rtl"
-              styles={{
-                root: { width: '100%', fontSize: '1.1rem' },
-                months: { width: '100%' },
-                month: { width: '100%' },
-                table: { width: '100%' },
-                day: { width: '48px', height: '48px', margin: '2px' },
-                caption: { fontSize: '1.2rem', marginBottom: '12px' },
-                head_cell: { width: '48px', padding: '8px 0', fontSize: '1rem' }
-              }}
-              modifiersStyles={{
-                selected: {
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  fontWeight: 'bold'
-                },
-                today: {
-                  color: '#3b82f6',
-                  fontWeight: 'bold',
-                  border: '2px solid #3b82f6'
-                }
-              }}
-              footer={
-                <div className="mt-4 text-sm text-gray-500 text-center">
-                  לחץ על תאריך התחלה וסיום
-                </div>
-              }
+              dateFormat="dd/MM/yyyy"
             />
           </div>
         </div>
