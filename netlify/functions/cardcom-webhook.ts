@@ -91,7 +91,7 @@ export const handler: Handler = async (event) => {
     console.log('Processing payment for order:', orderId);
 
     const updateParams = {
-      status: 'paid',
+      payment_status: 'paid',
       payment_method: 'credit_card',
       payment_reference: payload.TranZactionInfo?.ApprovalNumber,
       paid_at: new Date().toISOString(),
