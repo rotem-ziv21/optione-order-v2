@@ -90,119 +90,61 @@ export const handler: Handler = async (event) => {
 
     console.log('Processing payment for order:', orderId);
 
-    // עדכון סטטוס ההזמנה ל-completed
-    const { data: orderData, error: orderError } = await supabase
+    const updateParams = {
+      status: 'paid',
+      payment_method: 'credit_card',
+      payment_reference: payload.TranZactionInfo?.ApprovalNumber,
+      paid_at: new Date().toISOString(),
+      transaction_id: payload.TranZactionId?.toString(),
+      receipt_url: payload.DocumentInfo?.DocumentUrl
+    };
+
+    console.log('Update params:', updateParams);
+
+    // עדכון סטטוס ההזמנה ל-paid
+    const { error: orderError } = await supabase
       .from('customer_orders')
-      .update({
-        status: 'completed',
-        payment_method: 'credit_card',
-        payment_reference: payload.TranzactionInfo?.ApprovalNumber,
-        paid_at: new Date().toISOString(),
-        transaction_id: payload.TranzactionId?.toString(),
-        receipt_url: payload.DocumentInfo?.DocumentUrl || null
-      })
-      .eq('id', orderId)
-      .select();
+      .update(updateParams)
+      .eq('id', orderId);
 
     if (orderError) {
       console.error('Error updating order:', orderError);
-      console.error('Update params:', {
-        orderId,
-        status: 'completed',
-        payment_method: 'credit_card',
-        payment_reference: payload.TranzactionInfo?.ApprovalNumber,
-        paid_at: new Date().toISOString(),
-        transaction_id: payload.TranzactionId?.toString(),
-        receipt_url: payload.DocumentInfo?.DocumentUrl || null
-      });
       throw orderError;
     }
 
-    if (!orderData || orderData.length === 0) {
-      console.error('No order found with ID:', orderId);
-      throw new Error(`Order not found: ${orderId}`);
-    }
+    // הוספת הערה ב-CRM
+    try {
+      const { data: orderData, error: fetchError } = await supabase
+        .from('customer_orders')
+        .select('customer_id, total_amount')
+        .eq('id', orderId)
+        .single();
 
-    console.log('Order updated successfully:', orderData);
-
-    // Get customer details in a separate query if needed
-    const { data: customerData, error: customerError } = await supabase
-      .from('customer_orders')
-      .select(`
-        *,
-        customers!inner (
-          contact_id,
-          name,
-          email
-        ),
-        order_items!inner (
-          quantity,
-          products!inner (
-            name
-          )
-        )
-      `)
-      .eq('id', orderId)
-      .single();
-
-    if (customerError) {
-      console.error('Error fetching customer details:', customerError);
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ 
-          message: 'Payment processed successfully, but failed to send CRM note',
-          orderId,
-          orderData
-        })
-      };
-    }
-
-    // שליחת הודעה ל-CRM
-    if (customerData?.customers?.contact_id) {
-      try {
-        console.log('Preparing CRM note for contact:', customerData.customers.contact_id);
-
-        const itemsList = customerData.order_items
-          ?.map(item => `${item.products.name} (${item.quantity})`)
-          .join(', ');
-
-        const noteBody = `✅ תשלום התקבל בכרטיס אשראי\n` +
-          `סכום: ₪${customerData.total_amount}\n` +
-          `פריטים: ${itemsList}\n` +
-          `מספר הזמנה: ${customerData.id}\n` +
-          `מספר אישור: ${payload.TranzactionInfo?.ApprovalNumber}\n` +
-          `סוג כרטיס: ${payload.TranzactionInfo?.CardName}\n` +
-          `4 ספרות אחרונות: ${payload.TranzactionInfo?.Last4CardDigits}\n` +
-          `מספר תשלומים: ${payload.TranzactionInfo?.NumberOfPayments}\n` +
-          `קישור לקבלה: ${payload.DocumentInfo?.DocumentUrl}`;
-
-        console.log('Sending note to CRM:', noteBody);
-
-        await addContactNote(customerData.customers.contact_id, noteBody);
-        console.log('CRM note added successfully');
-      } catch (crmError) {
-        console.error('Error adding CRM note:', crmError);
-        // לא נזרוק שגיאה כי התשלום כבר עבר בהצלחה
+      if (fetchError) {
+        console.error('Error fetching order details:', fetchError);
+      } else if (orderData) {
+        const noteText = `תשלום בסך ${orderData.total_amount} ₪ התקבל בהצלחה.\nמספר אישור: ${payload.TranZactionInfo?.ApprovalNumber}\nקישור לחשבונית: ${payload.DocumentInfo?.DocumentUrl}`;
+        
+        await addContactNote(orderData.customer_id, noteText);
       }
-    } else {
-      console.warn('No contact_id found for order:', customerData);
+    } catch (crmError) {
+      console.error('Error adding CRM note:', crmError);
+      // לא נזרוק שגיאה כאן כדי לא לפגוע בתהליך העדכון
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ 
-        message: 'Payment processed successfully',
-        orderId,
-        orderData
-      })
+      body: JSON.stringify({ message: 'Webhook processed successfully' })
     };
+
   } catch (error) {
     console.error('Error processing webhook:', error);
+    
     return {
       statusCode: 500,
       body: JSON.stringify({ 
-        message: 'Error processing webhook',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        message: 'Error processing webhook', 
+        error: error instanceof Error ? error.message : 'Unknown error' 
       })
     };
   }
