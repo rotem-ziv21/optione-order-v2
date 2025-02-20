@@ -40,8 +40,8 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
 
   // האזנה לשינויים בהזמנה
   useOrderSubscription(orderId, (updatedOrder) => {
-    if (updatedOrder.payment_status === 'paid' && status !== 'paid') {
-      setStatus('paid');
+    if (updatedOrder.status === 'completed' && status !== 'completed') {
+      setStatus('completed');
       if (updatedOrder.receipt_url) {
         setReceiptUrl(updatedOrder.receipt_url);
       }
@@ -53,8 +53,7 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
   const statusOptions = [
     { value: 'pending', label: 'ממתין' },
     { value: 'completed', label: 'הושלם' },
-    { value: 'cancelled', label: 'בוטל' },
-    { value: 'paid', label: 'שולם' }
+    { value: 'cancelled', label: 'בוטל' }
   ];
 
   const handleUpdateStatus = async () => {
@@ -88,8 +87,8 @@ const OrderStatusUpdate: React.FC<OrderStatusUpdateProps> = ({ orderId, currentS
       console.log('Order status updated successfully');
 
       // אם העדכון הוא למצב 'paid', שלח הערה ל-CRM
-      if (status === 'paid') {
-        console.log('Status is paid, fetching order details...');
+      if (status === 'completed') {
+        console.log('Status is completed, fetching order details...');
         
         const { data: order, error: orderError } = await supabase
           .from('customer_orders')

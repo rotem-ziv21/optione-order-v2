@@ -4,7 +4,7 @@ import { RealtimeChannel } from '@supabase/supabase-js'
 
 export interface Order {
   id: string
-  payment_status: string
+  status: 'pending' | 'completed' | 'cancelled'
   payment_details?: {
     auth_number?: string
     card_mask?: string
@@ -25,7 +25,7 @@ export function useOrderSubscription(orderId: string, onUpdate: (order: Order) =
           {
             event: 'UPDATE',
             schema: 'public',
-            table: 'orders',
+            table: 'customer_orders',
             filter: `id=eq.${orderId}`
           },
           (payload) => {

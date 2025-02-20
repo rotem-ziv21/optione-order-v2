@@ -70,6 +70,35 @@ export interface Database {
           updated_at?: string
         }
       }
+      business_webhooks: {
+        Row: {
+          id: string
+          business_id: string
+          url: string
+          on_order_created: boolean
+          on_order_paid: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          url: string
+          on_order_created?: boolean
+          on_order_paid?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          url?: string
+          on_order_created?: boolean
+          on_order_paid?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       quotes: {
         Row: {
           id: string

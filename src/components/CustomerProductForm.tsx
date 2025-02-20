@@ -25,6 +25,7 @@ interface CustomerProductFormProps {
     price: number;
     currency: string;
     stock: number;
+    description: string;
   }>;
   customerId: string;
   businessId: string;
@@ -57,12 +58,15 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
 
   // Fetch customer details when needed for quote generation
   const fetchCustomerDetails = async () => {
+    console.log('Fetching customer details for ID:', customerId);
     try {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
         .eq('contact_id', customerId)
         .single();
+
+      console.log('Customer query result:', { data, error });
 
       if (error) throw error;
       return data;
@@ -79,39 +83,33 @@ export default function CustomerProductForm({ onClose, onSubmit, products, custo
       return;
     }
 
-    const formattedProducts = data.products.map(item => {
-      const product = products.find(p => p.id === item.productId);
-      if (!product) throw new Error(`Product not found: ${item.productId}`);
-      
-      return {
-        id: product.id,
-        name: product.name,
-        quantity: item.quantity,
-        price: product.price,
-        currency: product.currency
-      };
-    });
-
-    if (action === 'quote') {
-      const customerData = await fetchCustomerDetails();
-      if (!customerData) {
-        setError('לא ניתן למצוא את פרטי הלקוח');
-        return;
-      }
-      setCustomerDetails(customerData);
-      setSelectedProducts(formattedProducts);
-      setShowQuoteGenerator(true);
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
 
     try {
-      onSubmit(data);
+      if (action === 'quote') {
+        const customerData = await fetchCustomerDetails();
+        if (!customerData) {
+          throw new Error('לא ניתן למצוא את פרטי הלקוח');
+        }
+        setCustomerDetails(customerData);
+        setSelectedProducts(data.products);
+        setShowQuoteGenerator(true);
+        return;
+      }
+
+      // שליחת הנתונים המלאים
+      await onSubmit({
+        ...data,
+        products: data.products.map(item => ({
+          ...item,
+          productId: item.productId.trim() // וודא שאין רווחים
+        }))
+      });
+      
       onClose();
     } catch (error) {
-      console.error('Error adding order:', error);
+      console.error('Error submitting form:', error);
       setError(error instanceof Error ? error.message : 'שגיאה בהוספת ההזמנה');
     } finally {
       setSubmitting(false);
