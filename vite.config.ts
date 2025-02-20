@@ -6,13 +6,14 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'lucide-react'],
+    include: ['react', 'react-dom', 'react-router-dom', 'lucide-react', 'react-datepicker'],
     force: true
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    preserveSymlinks: true
   },
   build: {
     outDir: 'dist',
@@ -28,7 +29,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['lucide-react'],
+          ui: ['lucide-react', 'react-datepicker'],
         },
       },
     },

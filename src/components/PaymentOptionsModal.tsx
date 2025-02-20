@@ -155,20 +155,6 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
           console.error('Error updating stock:', stockError);
           throw stockError;
         }
-
-        // שליחת webhook
-        await triggerWebhooks({
-          event: 'order_paid',
-          business_id: order.business_id,
-          data: {
-            ...updatedOrder,
-            status: 'completed',
-            payment_method: paymentMethod,
-            payment_reference: paymentReference,
-            paid_at: new Date().toISOString(),
-            is_paid: true
-          }
-        });
       }
 
       onSuccess();

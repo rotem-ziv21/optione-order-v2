@@ -8,6 +8,7 @@ import OrderStatusUpdate from '../components/OrderStatusUpdate';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useCardcomCallback } from '../hooks/useCardcomCallback';
+import { triggerWebhooks } from '../lib/webhooks';
 
 interface Product {
   id: string;
@@ -201,51 +202,146 @@ export default function Customers() {
     }
   };
 
-  const handleAddProducts = async (data: { products: Array<{ productId: string; quantity: number }> }) => {
+  const handleAddProducts = async (data: { 
+    products: Array<{ productId: string; quantity: number }>,
+    customer?: any,
+    total_amount?: number
+  }) => {
     if (!selectedCustomer || isAddingProducts) return;
 
+    let createdOrder = null;
     setIsAddingProducts(true);
+    
     try {
-      const totalAmount = Number(data.products.reduce((sum, item) => {
+      console.log('Creating order with data:', { data, selectedCustomer, products });
+
+      // חישוב הסכום הכולל
+      const totalAmount = data.total_amount || Number(data.products.reduce((sum, item) => {
         const product = products.find(p => p.id === item.productId);
         return sum + (product ? product.price * item.quantity : 0);
       }, 0).toFixed(2));
 
+      // הכנת פרטי המוצרים
+      const orderProducts = [];
+      const validatedItems = [];
+
+      for (const item of data.products) {
+        const product = products.find(p => p.id === item.productId);
+        console.log('Processing product:', { item, foundProduct: product });
+        
+        if (!product) {
+          console.error('Product not found:', item.productId);
+          throw new Error(`Product not found: ${item.productId}`);
+        }
+
+        // שמירת המידע לפריטי ההזמנה
+        validatedItems.push({
+          productId: product.id,  // שמירת ה-ID המקורי
+          quantity: item.quantity,
+          price: product.price,
+          currency: product.currency
+        });
+        
+        // שמירת המידע המלא למוצר
+        orderProducts.push({
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          quantity: item.quantity,
+          price: product.price,
+          currency: product.currency || 'ILS'
+        });
+      }
+
+      console.log('Prepared order products:', orderProducts);
+      console.log('Validated items:', validatedItems);
+
+      // יצירת ההזמנה - רק עם השדות שקיימים בטבלה
+      const orderData = {
+        customer_id: selectedCustomer.contact_id,
+        total_amount: totalAmount,
+        currency: 'ILS',
+        status: 'pending',
+        business_id: currentBusinessId
+      };
+
+      console.log('Creating order with:', orderData);
+
       const { data: order, error: orderError } = await supabase
         .from('customer_orders')
-        .insert([{
-          customer_id: selectedCustomer.contact_id,
-          total_amount: totalAmount,
-          currency: 'ILS',
-          status: 'pending',
-          business_id: currentBusinessId
-        }])
+        .insert([orderData])
         .select()
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error('Error creating order:', orderError);
+        throw orderError;
+      }
 
-      const orderItems = data.products.map(item => {
-        const product = products.find(p => p.id === item.productId);
-        return {
-          order_id: order.id,
-          product_id: item.productId,
-          quantity: item.quantity,
-          price_at_time: product?.price || 0,
-          currency: product?.currency || 'ILS'
-        };
+      createdOrder = order;
+      console.log('Order created:', order);
+
+      // הפעל webhook עם כל המידע
+      await triggerWebhooks({
+        event: 'order_created',
+        business_id: currentBusinessId,
+        data: {
+          ...order,
+          customer_id: selectedCustomer.contact_id,
+          customer: {
+            id: selectedCustomer.contact_id,
+            name: selectedCustomer.name,
+            email: selectedCustomer.email,
+            phone: selectedCustomer.phone
+          },
+          products: orderProducts, // שולחים את פרטי המוצרים
+          items: orderProducts.map(item => ({  // שולחים גם בפורמט הישן לתאימות
+            product_id: item.id,
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            price: item.price,
+            currency: item.currency,
+            total: item.quantity * item.price
+          }))
+        }
       });
+
+      // הוספת פריטי ההזמנה
+      const orderItems = validatedItems.map(item => ({
+        order_id: order.id,
+        product_id: item.productId,
+        quantity: item.quantity,
+        price_at_time: item.price,
+        currency: item.currency || 'ILS'
+      }));
+
+      console.log('Creating order items:', orderItems);
 
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(orderItems);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('Error creating order items:', itemsError);
+        throw itemsError;
+      }
+
+      console.log('Order items created successfully');
 
       setShowProductForm(false);
-      await fetchCustomerOrders();  // חכה לסיום הפעולה
+      await fetchCustomerOrders();
     } catch (error) {
       console.error('Error adding order:', error);
+      // אם יש שגיאה ונוצרה הזמנה, מחק אותה
+      if (createdOrder?.id) {
+        console.log('Deleting failed order:', createdOrder.id);
+        await supabase
+          .from('customer_orders')
+          .delete()
+          .eq('id', createdOrder.id);
+      }
+      throw error; // זורק את השגיאה כדי שהקומפוננטה תוכל לטפל בה
     } finally {
       setIsAddingProducts(false);
     }
@@ -259,6 +355,76 @@ export default function Customers() {
   const handleCustomerClick = (customer: Customer) => {
     setSelectedCustomer(customer);
     setShowDetails(true);
+  };
+
+  const handleOrderPaid = async (orderId: string) => {
+    try {
+      // עדכון סטטוס ההזמנה
+      const { data: order, error: updateError } = await supabase
+        .from('customer_orders')
+        .update({
+          status: 'completed', // שינוי מ-'paid' ל-'completed'
+          paid_at: new Date().toISOString(),
+          payment_status: 'paid',
+          payment_method: 'manual'
+        })
+        .eq('id', orderId)
+        .select('*, customer:customers!customer_id(*)')
+        .single();
+
+      if (updateError) {
+        console.error('Error updating order status:', updateError);
+        throw updateError;
+      }
+
+      console.log('Order marked as paid:', order);
+
+      // שליחת webhook
+      await triggerWebhooks({
+        event: 'order_paid',
+        business_id: currentBusinessId,
+        data: {
+          ...order,
+          customer_id: order.customer_id,
+          customer: order.customer,
+          products: order.products || [], // אם יש products בהזמנה
+          items: await getOrderItems(orderId), // קבלת פריטים מעודכנים
+          payment_status: 'paid',
+          payment_method: 'manual'
+        }
+      });
+
+      // רענון הרשימה
+      await fetchCustomerOrders();
+    } catch (error) {
+      console.error('Error marking order as paid:', error);
+      throw error; // זורק את השגיאה כדי שהקומפוננטה תוכל לטפל בה
+    }
+  };
+
+  const getOrderItems = async (orderId: string) => {
+    const { data: items, error } = await supabase
+      .from('order_items')
+      .select(`
+        *,
+        product:products(*)
+      `)
+      .eq('order_id', orderId);
+
+    if (error) {
+      console.error('Error fetching order items:', error);
+      return [];
+    }
+
+    return items.map(item => ({
+      product_id: item.product_id,
+      name: item.product.name,
+      description: item.product.description,
+      quantity: item.quantity,
+      price: item.price_at_time,
+      currency: item.currency,
+      total: item.quantity * item.price_at_time
+    }));
   };
 
   // Filter customers based on search term
@@ -428,6 +594,12 @@ export default function Customers() {
                       className="text-blue-600 hover:text-blue-900"
                     >
                       עדכון סטטוס
+                    </button>
+                    <button
+                      onClick={() => handleOrderPaid(order.id)}
+                      className="text-blue-600 hover:text-blue-900 ml-3"
+                    >
+                      שולם
                     </button>
                   </td>
                 </tr>

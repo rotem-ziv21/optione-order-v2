@@ -11,6 +11,13 @@ interface Settings {
   cardcom_api_name: string;
 }
 
+interface WebhookSettings {
+  id?: string;
+  url: string;
+  on_order_created: boolean;
+  on_order_paid: boolean;
+}
+
 export default function Settings() {
   const [settings, setSettings] = useState<Settings>({
     business_id: '',
@@ -18,6 +25,11 @@ export default function Settings() {
     api_token: '',
     cardcom_terminal: '',
     cardcom_api_name: ''
+  });
+  const [webhookSettings, setWebhookSettings] = useState<WebhookSettings>({
+    url: '',
+    on_order_created: false,
+    on_order_paid: false
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -80,32 +92,44 @@ export default function Settings() {
 
   const fetchSettings = async (bid: string) => {
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('business_id', bid)
-        .maybeSingle();
+      const [{ data: settingsData, error: settingsError }, { data: webhookData, error: webhookError }] = await Promise.all([
+        supabase
+          .from('settings')
+          .select('*')
+          .eq('business_id', bid)
+          .maybeSingle(),
+        supabase
+          .from('business_webhooks')
+          .select('*')
+          .eq('business_id', bid)
+          .maybeSingle()
+      ]);
 
-      if (error) throw error;
+      if (settingsError) throw settingsError;
+      if (webhookError) throw webhookError;
 
-      if (data) {
+      if (settingsData) {
         setSettings({
-          id: data.id,
-          business_id: data.business_id,
-          location_id: data.location_id || '',
-          api_token: data.api_token || '',
-          cardcom_terminal: data.cardcom_terminal || '',
-          cardcom_api_name: data.cardcom_api_name || ''
+          id: settingsData.id,
+          business_id: settingsData.business_id,
+          location_id: settingsData.location_id || '',
+          api_token: settingsData.api_token || '',
+          cardcom_terminal: settingsData.cardcom_terminal || '',
+          cardcom_api_name: settingsData.cardcom_api_name || ''
         });
-      } else {
-        setSettings(prev => ({
-          ...prev,
-          business_id: bid
-        }));
+      }
+
+      if (webhookData) {
+        setWebhookSettings({
+          id: webhookData.id,
+          url: webhookData.url || '',
+          on_order_created: webhookData.on_order_created || false,
+          on_order_paid: webhookData.on_order_paid || false
+        });
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
-      setMessage({ type: 'error', text: 'שגיאה בטעינת ההגדרות' });
+      setMessage({ type: 'error', text: 'שגיאה בטעינת הגדרות' });
     }
   };
 
@@ -115,35 +139,57 @@ export default function Settings() {
     fetchSettings(newBusinessId);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const currentBusinessId = isAdmin ? selectedBusiness : businessId;
-    
-    if (!currentBusinessId) {
-      setMessage({ type: 'error', text: 'לא נמצא מזהה עסק' });
-      return;
-    }
-
+  const handleSave = async () => {
     setSaving(true);
     setMessage({ type: '', text: '' });
 
     try {
-      const settingsToSave = {
-        ...settings,
-        business_id: currentBusinessId
+      const bid = isAdmin ? selectedBusiness : businessId;
+      if (!bid) throw new Error('לא נבחר עסק');
+
+      // שמירת הגדרות CRM
+      const settingsData = {
+        business_id: bid,
+        location_id: settings.location_id,
+        api_token: settings.api_token,
+        cardcom_terminal: settings.cardcom_terminal,
+        cardcom_api_name: settings.cardcom_api_name
       };
 
-      const { error } = await supabase
-        .from('settings')
-        .upsert([settingsToSave]);
+      const { error: settingsError } = settings.id
+        ? await supabase
+            .from('settings')
+            .update(settingsData)
+            .eq('id', settings.id)
+        : await supabase
+            .from('settings')
+            .insert([settingsData]);
 
-      if (error) throw error;
+      if (settingsError) throw settingsError;
+
+      // שמירת הגדרות Webhook
+      const webhookData = {
+        business_id: bid,
+        url: webhookSettings.url,
+        on_order_created: webhookSettings.on_order_created,
+        on_order_paid: webhookSettings.on_order_paid
+      };
+
+      const { error: webhookError } = webhookSettings.id
+        ? await supabase
+            .from('business_webhooks')
+            .update(webhookData)
+            .eq('id', webhookSettings.id)
+        : await supabase
+            .from('business_webhooks')
+            .insert([webhookData]);
+
+      if (webhookError) throw webhookError;
 
       setMessage({ type: 'success', text: 'ההגדרות נשמרו בהצלחה' });
-      fetchSettings(currentBusinessId);
     } catch (error) {
       console.error('Error saving settings:', error);
-      setMessage({ type: 'error', text: 'שגיאה בשמירת ההגדרות' });
+      setMessage({ type: 'error', text: 'שגיאה בשמירת הגדרות' });
     } finally {
       setSaving(false);
     }
@@ -194,7 +240,7 @@ export default function Settings() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={(e) => e.preventDefault()} className="p-6 space-y-6">
           <div className="space-y-6">
             {/* CRM Settings */}
             <div>
@@ -236,9 +282,49 @@ export default function Settings() {
               </div>
             </div>
 
+            {/* Webhook Settings */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">הגדרות Webhook</h3>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="webhook_url" className="block text-sm font-medium text-gray-700">
+                    Webhook URL
+                  </label>
+                  <input
+                    type="text"
+                    id="webhook_url"
+                    value={webhookSettings.url}
+                    onChange={(e) => setWebhookSettings(prev => ({ ...prev, url: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="https://your-webhook-url.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="mr-2"
+                      checked={webhookSettings.on_order_created}
+                      onChange={(e) => setWebhookSettings(prev => ({ ...prev, on_order_created: e.target.checked }))}
+                    />
+                    <span className="text-sm">שלח webhook כשנוצרת הזמנה חדשה</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="mr-2"
+                      checked={webhookSettings.on_order_paid}
+                      onChange={(e) => setWebhookSettings(prev => ({ ...prev, on_order_paid: e.target.checked }))}
+                    />
+                    <span className="text-sm">שלח webhook כשהזמנה שולמה</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Cardcom Settings */}
             <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4">הגדרות סליקה - Cardcom</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">הגדרות Cardcom</h3>
               <div className="space-y-4">
                 <div>
                   <label htmlFor="cardcom_terminal" className="block text-sm font-medium text-gray-700">
@@ -279,8 +365,9 @@ export default function Settings() {
 
           <div className="flex justify-end">
             <button
-              type="submit"
+              type="button"
               disabled={saving}
+              onClick={handleSave}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 disabled:opacity-50"
             >
               <Save className="w-5 h-5" />
