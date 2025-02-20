@@ -23,9 +23,10 @@ interface PaymentOptionsModalProps {
   }>;
   onClose: () => void;
   onSuccess: () => void;
+  onPaymentComplete?: () => void;
 }
 
-export default function PaymentOptionsModal({ customer, orders, onClose, onSuccess }: PaymentOptionsModalProps) {
+export default function PaymentOptionsModal({ customer, orders, onClose, onSuccess, onPaymentComplete }: PaymentOptionsModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showManualPayment, setShowManualPayment] = useState(false);
@@ -37,37 +38,6 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
   const totalAmount = orders.reduce((sum, order) => 
     sum + Number(order.total_amount), 0);
   const currency = orders[0]?.currency || 'ILS';
-
-  const updateStock = async (orderId: string) => {
-    try {
-      // Get order items with their quantities
-      const { data: orderItems, error: itemsError } = await supabase
-        .from('order_items')
-        .select(`
-          product_id,
-          quantity
-        `)
-        .eq('order_id', orderId);
-
-      if (itemsError) throw itemsError;
-
-      // Update stock for each product
-      for (const item of orderItems || []) {
-        const { error: stockError } = await supabase
-          .rpc('update_product_stock', {
-            p_product_id: item.product_id,
-            p_quantity: item.quantity
-          });
-
-        if (stockError) {
-          console.error('Error updating stock for product:', item.product_id, stockError);
-          throw new Error('שגיאה בעדכון המלאי');
-        }
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
 
   const handleCardcomPayment = async () => {
     setLoading(true);
@@ -130,23 +100,10 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
     setError(null);
 
     try {
-      // Update all orders status and update stock
+      // עדכון כל ההזמנות
       for (const order of orders) {
-        // Get order details with business info
-        const { data: orderDetails, error: orderError } = await supabase
-          .from('customer_orders')
-          .select(`
-            id,
-            total_amount,
-            business_id
-          `)
-          .eq('id', order.id)
-          .single();
-
-        if (orderError) throw orderError;
-
-        // Update order status
-        const { error: updateError } = await supabase
+        // עדכון סטטוס ההזמנה
+        const { data: updatedOrder, error: updateError } = await supabase
           .from('customer_orders')
           .update({
             status: 'completed',
@@ -154,42 +111,64 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
             payment_reference: paymentReference,
             paid_at: new Date().toISOString()
           })
-          .eq('id', order.id);
+          .eq('id', order.id)
+          .select()
+          .single();
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Error updating order:', updateError);
+          throw updateError;
+        }
 
-        // Get order items
+        // שליחת הערה ל-CRM
         const { data: orderItems } = await supabase
           .from('order_items')
           .select(`
             quantity,
-            products (
-              name
-            )
+            products (name)
           `)
           .eq('order_id', order.id);
 
-        // Create note for CRM
         const itemsList = orderItems?.map(item => 
           `${item.products.name} (${item.quantity})`
         ).join(', ');
 
-        const noteBody = `✅ תשלום התקבל\n` +
-                        `סכום: ₪${orderDetails.total_amount}\n` +
+        const noteBody = `הזמנה ${order.id} שולמה\n` +
                         `פריטים: ${itemsList}\n` +
-                        `מספר הזמנה: ${order.id}\n` +
+                        `סכום: ${order.total_amount} ${order.currency}\n` +
                         `אמצעי תשלום: ${paymentMethod}\n` +
                         `אסמכתא: ${paymentReference}`;
 
-        // Send note to CRM
         await addContactNote({
           contactId: customer.contact_id,
           body: noteBody,
-          businessId: orderDetails.business_id
+          type: 'payment'
         });
 
-        // Update stock for this order
-        await updateStock(order.id);
+        // עדכון מלאי
+        const { error: stockError } = await supabase
+          .rpc('update_product_stock', {
+            p_order_id: order.id
+          });
+
+        if (stockError) {
+          console.error('Error updating stock:', stockError);
+          throw stockError;
+        }
+
+        // שליחת webhook
+        await triggerWebhooks({
+          event: 'order_paid',
+          business_id: order.business_id,
+          data: {
+            ...updatedOrder,
+            status: 'completed',
+            payment_method: paymentMethod,
+            payment_reference: paymentReference,
+            paid_at: new Date().toISOString(),
+            is_paid: true
+          }
+        });
       }
 
       onSuccess();
