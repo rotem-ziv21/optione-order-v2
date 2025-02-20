@@ -4,8 +4,14 @@ import { supabase } from './supabase';
 export function initWebhooks() {
   console.log('Initializing webhook listener...');
   
-  const channel = supabase
-    .channel('webhooks')
+  const channel = supabase.channel('webhooks', {
+    config: {
+      broadcast: { self: true },
+      presence: { key: '' },
+    }
+  });
+
+  channel
     .on('postgres_changes', 
       { 
         event: '*', 
@@ -101,11 +107,18 @@ export function initWebhooks() {
       console.log('Webhook channel status:', status);
     }
   });
+
+  return channel; // מחזיר את הערוץ כדי שנוכל לסגור אותו אם צריך
 }
 
 // פונקציה לאתחול כל המערכת
 export function initializeApp() {
   console.log('Starting app initialization...');
-  initWebhooks();
+  const webhookChannel = initWebhooks();
   console.log('App initialization completed');
+
+  // מחזיר את הערוץ כדי שנוכל לסגור אותו כשצריך
+  return {
+    webhookChannel
+  };
 }

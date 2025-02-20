@@ -6,8 +6,15 @@ import { initializeApp } from './lib/init';
 
 // אתחול המערכת
 console.log('Initializing app...');
-initializeApp();
+const { webhookChannel } = initializeApp();
 console.log('App initialized');
+
+// ניקוי כשהאפליקציה נסגרת
+window.addEventListener('beforeunload', () => {
+  if (webhookChannel) {
+    webhookChannel.unsubscribe();
+  }
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
