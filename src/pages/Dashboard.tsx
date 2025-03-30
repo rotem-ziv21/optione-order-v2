@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Package, TrendingUp, Users, DollarSign, FileText } from 'lucide-react';
+import { Package, TrendingUp, Users, DollarSign, FileText, Download } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } from 'date-fns';
-import { DateRange } from 'react-day-picker';
+import type { DateRange } from 'react-day-picker';
 import DateRangeFilter from '../components/DateRangeFilter';
 import StaffStats from '../components/StaffStats';
 import { utils, writeFile } from 'xlsx';
-import { Download } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -56,26 +55,49 @@ export default function Dashboard() {
   const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDashboardData();
     getCurrentBusiness();
-  }, [dateRange]);
+  }, []);
+
+  useEffect(() => {
+    if (currentBusinessId) {
+      console.log('Fetching dashboard data with date range:', dateRange);
+      fetchDashboardData();
+    }
+  }, [dateRange, currentBusinessId]);
+
+  const handleDateRangeChange = (newRange: DateRange | undefined) => {
+    console.log('Date range changed to:', newRange);
+    setDateRange(newRange);
+  };
 
   const fetchDashboardData = async () => {
+    if (!currentBusinessId) {
+      console.log('No business ID available, skipping data fetch');
+      return;
+    }
+
+    setLoading(true);
     try {
-      // Fetch basic stats
+      console.log('Fetching dashboard data for business:', currentBusinessId, 'with date range:', dateRange);
+      
+      // Fetch basic stats with business_id filter
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id');
+        .select('id')
+        .eq('business_id', currentBusinessId);
       
       const { data: customersData, error: customersError } = await supabase
         .from('customers')
-        .select('id');
+        .select('id')
+        .eq('business_id', currentBusinessId);
       
       const { data: quotesData, error: quotesError } = await supabase
         .from('quotes')
-        .select('id');
+        .select('id')
+        .eq('business_id', currentBusinessId);
 
       if (productsError || customersError || quotesError) {
+        console.error('Errors fetching basic stats:', { productsError, customersError, quotesError });
         throw new Error('Error fetching basic stats');
       }
 
@@ -83,18 +105,29 @@ export default function Dashboard() {
       let query = supabase
         .from('customer_orders')
         .select('total_amount, created_at')
-        .eq('status', 'completed');
+        .eq('status', 'completed')
+        .eq('business_id', currentBusinessId);
 
       if (dateRange?.from) {
-        query = query.gte('created_at', startOfDay(dateRange.from).toISOString());
+        const fromDate = startOfDay(dateRange.from).toISOString();
+        console.log('Filtering orders from date:', fromDate);
+        query = query.gte('created_at', fromDate);
       }
+      
       if (dateRange?.to) {
-        query = query.lte('created_at', endOfDay(dateRange.to).toISOString());
+        const toDate = endOfDay(dateRange.to).toISOString();
+        console.log('Filtering orders to date:', toDate);
+        query = query.lte('created_at', toDate);
       }
 
       const { data: orders, error: ordersError } = await query;
 
-      if (ordersError) throw ordersError;
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError);
+        throw ordersError;
+      }
+
+      console.log('Filtered orders:', orders?.length || 0);
 
       const totalSales = orders?.length || 0;
       const totalRevenue = orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
@@ -136,10 +169,12 @@ export default function Dashboard() {
           ),
           customer_orders!inner (
             status,
-            created_at
+            created_at,
+            business_id
           )
         `)
-        .eq('customer_orders.status', 'completed');
+        .eq('customer_orders.status', 'completed')
+        .eq('customer_orders.business_id', currentBusinessId);
 
       if (dateRange?.from) {
         itemsQuery = itemsQuery.gte('customer_orders.created_at', startOfDay(dateRange.from).toISOString());
@@ -150,7 +185,12 @@ export default function Dashboard() {
 
       const { data: orderItems, error: itemsError } = await itemsQuery;
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('Error fetching order items:', itemsError);
+        throw itemsError;
+      }
+
+      console.log('Order items for business:', currentBusinessId, orderItems);
 
       const productStats = (orderItems || []).reduce((acc: any, item) => {
         const productName = item.products?.name;
@@ -249,8 +289,9 @@ export default function Dashboard() {
       // Fetch customers separately
       const { data: customers, error: customersError } = await supabase
         .from('customers')
-        .select('contact_id, name')
-        .in('contact_id', orders.map(order => order.customer_id));
+        .select('id, name')
+        .eq('business_id', currentBusinessId)
+        .in('id', orders.map(order => order.customer_id));
 
       if (customersError) {
         console.error('Error fetching customers:', customersError);
@@ -258,19 +299,19 @@ export default function Dashboard() {
       }
       console.log('Customers:', customers);
 
-      // Create a map of customer IDs to names
-      const customerMap = new Map(
-        customers?.map(customer => [customer.contact_id, customer.name]) || []
-      );
+      // Create a map for quick lookup
+      const customerMap = new Map();
+      (customers || []).forEach(customer => {
+        customerMap.set(customer.id, customer.name);
+      });
 
-      // Fetch order items with product details
+      // Fetch order items
       const { data: orderItems, error: itemsError } = await supabase
         .from('order_items')
         .select(`
           order_id,
           quantity,
           price_at_time,
-          currency,
           product_id,
           products (
             name
@@ -383,7 +424,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Date Range Filter */}
       <div className="flex justify-start">
-        <DateRangeFilter dateRange={dateRange} onDateRangeChange={setDateRange} />
+        <DateRangeFilter dateRange={dateRange} onDateRangeChange={handleDateRangeChange} />
       </div>
 
       {/* Stats Grid */}
@@ -484,7 +525,7 @@ export default function Dashboard() {
                   outerRadius={80}
                   label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                 >
-                  {topProducts.map((entry, index) => (
+                  {topProducts.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>

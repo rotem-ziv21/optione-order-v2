@@ -4,10 +4,11 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
+import type { DateRange } from 'react-day-picker';
 
 interface DateRangeFilterProps {
-  dateRange: { startDate: Date | null; endDate: Date | null } | undefined;
-  onDateRangeChange: (range: { startDate: Date | null; endDate: Date | null } | undefined) => void;
+  dateRange: DateRange | undefined;
+  onDateRangeChange: (range: DateRange | undefined) => void;
 }
 
 export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRangeFilterProps) {
@@ -15,16 +16,16 @@ export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRa
 
   console.log('DateRangeFilter props:', { dateRange, isOpen });
 
-  const formatDateRange = (range: { startDate: Date | null; endDate: Date | null } | undefined) => {
-    if (!range?.startDate) {
+  const formatDateRange = (range: DateRange | undefined) => {
+    if (!range?.from) {
       return 'בחר תאריכים';
     }
 
-    if (!range.endDate) {
-      return format(range.startDate, 'dd/MM/yyyy', { locale: he });
+    if (!range.to) {
+      return format(range.from, 'dd/MM/yyyy', { locale: he });
     }
 
-    return `${format(range.startDate, 'dd/MM/yyyy', { locale: he })} - ${format(range.endDate, 'dd/MM/yyyy', { locale: he })}`;
+    return `${format(range.from, 'dd/MM/yyyy', { locale: he })} - ${format(range.to, 'dd/MM/yyyy', { locale: he })}`;
   };
 
   return (
@@ -50,13 +51,18 @@ export default function DateRangeFilter({ dateRange, onDateRangeChange }: DateRa
               </svg>
             </button>
             <DatePicker
-              selected={dateRange?.startDate}
+              selected={dateRange?.from}
               onChange={(dates) => {
                 const [start, end] = dates;
-                onDateRangeChange({ startDate: start, endDate: end });
+                if (start) {
+                  setIsOpen(!end); // Close the picker when both dates are selected
+                  onDateRangeChange({ from: start, to: end });
+                } else {
+                  onDateRangeChange(undefined);
+                }
               }}
-              startDate={dateRange?.startDate}
-              endDate={dateRange?.endDate}
+              startDate={dateRange?.from}
+              endDate={dateRange?.to}
               selectsRange
               inline
               locale={he}

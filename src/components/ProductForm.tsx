@@ -19,6 +19,7 @@ const productSchema = z.object({
     required_error: 'נא לבחור מטבע',
   }),
   stock: z.number().min(0, 'המלאי חייב להיות חיובי'),
+  business_id: z.string().uuid().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -28,12 +29,14 @@ interface ProductFormProps {
   onSubmit: (data: ProductFormData) => void;
   initialData?: ProductFormData;
   mode?: 'create' | 'edit';
+  businessId?: string;
 }
 
-export default function ProductForm({ onClose, onSubmit, initialData, mode = 'create' }: ProductFormProps) {
+export default function ProductForm({ onClose, onSubmit, initialData, mode = 'create', businessId }: ProductFormProps) {
   const { register, handleSubmit, formState: { errors }, setError } = useForm<ProductFormData>({
     defaultValues: initialData || {
-      currency: 'ILS'
+      currency: 'ILS',
+      business_id: businessId
     }
   });
   const [submitting, setSubmitting] = useState(false);
@@ -46,27 +49,78 @@ export default function ProductForm({ onClose, onSubmit, initialData, mode = 'cr
     try {
       // Check if SKU already exists only in create mode
       if (mode === 'create') {
-        const { data: existingProducts, error: checkError } = await supabase
-          .from('products')
-          .select('id')
-          .eq('sku', data.sku);
-
-        if (checkError) {
-          throw checkError;
-        }
-
-        if (existingProducts && existingProducts.length > 0) {
-          setError('sku', {
-            type: 'manual',
-            message: 'מק"ט זה כבר בשימוש. נא לבחור מק"ט אחר.'
+        try {
+          // First try to use the RPC function if available
+          const { data: skuExists, error: rpcError } = await supabase.rpc('check_sku_exists', {
+            p_sku: data.sku,
+            p_business_id: initialData?.business_id
           });
-          setSubmitting(false);
-          return;
+          
+          if (!rpcError && skuExists) {
+            setError('sku', {
+              type: 'manual',
+              message: 'מק"ט זה כבר בשימוש. נא לבחור מק"ט אחר.'
+            });
+            setSubmitting(false);
+            return;
+          }
+        } catch (rpcError) {
+          console.log('RPC method not available, falling back to direct query');
+          
+          // Fall back to direct query
+          try {
+            const { data: existingProducts, error: checkError } = await supabase
+              .from('products')
+              .select('id')
+              .eq('sku', data.sku);
+
+            if (checkError) {
+              console.error('Error checking SKU:', checkError);
+              // Continue with submission even if check fails
+            } else if (existingProducts && existingProducts.length > 0) {
+              setError('sku', {
+                type: 'manual',
+                message: 'מק"ט זה כבר בשימוש. נא לבחור מק"ט אחר.'
+              });
+              setSubmitting(false);
+              return;
+            }
+          } catch (queryError) {
+            console.error('Error in SKU query:', queryError);
+            // Continue with submission even if check fails
+          }
         }
       }
 
-      await onSubmit(data);
-      onClose();
+      // Generate a random SKU suffix if needed to avoid duplicates
+      if (mode === 'create') {
+        const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const originalSku = data.sku;
+        
+        // Try with the original SKU first, but be ready to modify it if needed
+        try {
+          await onSubmit(data);
+          onClose();
+          return;
+        } catch (submitError: any) {
+          // Check if the error is a duplicate key error
+          if (submitError?.code === '23505' && submitError?.message?.includes('products_sku_key')) {
+            // Try again with a modified SKU
+            data.sku = `${originalSku}-${randomSuffix}`;
+            console.log('Retrying with modified SKU:', data.sku);
+            await onSubmit(data);
+            onClose();
+            return;
+          } else {
+            // Re-throw other errors
+            throw submitError;
+          }
+        }
+      } else {
+        // For edit mode, just submit normally
+        await onSubmit(data);
+        onClose();
+      }
     } catch (error) {
       console.error('Error handling product:', error);
       setServerError('אירעה שגיאה. נא לנסות שוב.');

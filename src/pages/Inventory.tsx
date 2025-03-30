@@ -28,6 +28,7 @@ function Inventory() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [currentBusinessId, setCurrentBusinessId] = useState('');
 
   useEffect(() => {
     fetchProducts();
@@ -55,6 +56,8 @@ function Inventory() {
       if (businessError) throw businessError;
       if (!userBusiness) throw new Error('No active business found for user');
 
+      setCurrentBusinessId(userBusiness.business_id);
+
       // Fetch products for the current business
       const { data, error } = await supabase
         .from('products')
@@ -77,26 +80,12 @@ function Inventory() {
 
   const handleAddProduct = async (data: Omit<Product, 'id'>) => {
     try {
-      // Get the current user's business_id
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No user found');
-
-      const { data: userBusiness, error: businessError } = await supabase
-        .from('business_staff')
-        .select('business_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .single();
-
-      if (businessError) throw businessError;
-      if (!userBusiness) throw new Error('No active business found for user');
-
       // Add the product with the business_id
       const { error } = await supabase
         .from('products')
         .insert([{
           ...data,
-          business_id: userBusiness.business_id,
+          business_id: currentBusinessId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }]);
@@ -169,15 +158,29 @@ function Inventory() {
       </div>
 
       {/* Add/Edit Product Modal */}
-      {(showAddProduct || editingProduct) && (
+      {showAddProduct && (
         <ProductForm
-          onClose={() => {
-            setShowAddProduct(false);
-            setEditingProduct(null);
+          onClose={() => setShowAddProduct(false)}
+          onSubmit={handleAddProduct}
+          mode="create"
+          businessId={currentBusinessId || ''}
+        />
+      )}
+
+      {editingProduct && (
+        <ProductForm
+          onClose={() => setEditingProduct(null)}
+          onSubmit={handleEditProduct}
+          initialData={{
+            name: editingProduct.name,
+            sku: editingProduct.sku,
+            price: editingProduct.price,
+            currency: editingProduct.currency as any,
+            stock: editingProduct.stock,
+            business_id: editingProduct.business_id
           }}
-          onSubmit={editingProduct ? handleEditProduct : handleAddProduct}
-          initialData={editingProduct || undefined}
-          mode={editingProduct ? 'edit' : 'create'}
+          mode="edit"
+          businessId={currentBusinessId || ''}
         />
       )}
 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, ExternalLink, ShoppingBag, MoreVertical } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, UserPlus, ShoppingBag } from 'lucide-react';
 import CustomerProductForm from '../components/CustomerProductForm';
 import CustomerSearch from '../components/CustomerSearch';
 import CustomerDetails from '../components/CustomerDetails';
@@ -8,6 +8,7 @@ import OrderStatusUpdate from '../components/OrderStatusUpdate';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useCardcomCallback } from '../hooks/useCardcomCallback';
+import type { CRMContact } from '../lib/crm-api';
 
 interface Product {
   id: string;
@@ -177,7 +178,7 @@ export default function Customers() {
         const items = orderItems
           ?.filter(item => item.order_id === order.id)
           .map(item => ({
-            product_name: item.products.name,
+            product_name: item.products?.name || 'Unknown Product',
             quantity: item.quantity,
             price_at_time: item.price_at_time,
             currency: item.currency
@@ -254,6 +255,19 @@ export default function Customers() {
   const handleStatusUpdate = (orderId: string) => {
     setSelectedOrder(orderId);
     setShowStatusUpdate(true);
+  };
+
+  const getOrderStatus = (orderId: string | null): string => {
+    if (!orderId) return 'pending';
+    
+    // Find the order in customerOrders
+    for (const customerId in customerOrders) {
+      const order = customerOrders[customerId].find(o => o.id === orderId);
+      if (order) {
+        return order.status;
+      }
+    }
+    return 'pending'; // Default status if not found
   };
 
   const handleCustomerClick = (customer: Customer) => {
@@ -451,9 +465,23 @@ export default function Customers() {
       {showSearch && (
         <CustomerSearch
           onClose={() => setShowSearch(false)}
-          onCustomerSelect={() => {
+          onCustomerSelect={(contact) => {
             setShowSearch(false);
-            fetchCustomers();
+            // Force an immediate refresh of customers
+            fetchCustomers().then(() => {
+              // After a short delay to ensure the database has updated
+              setTimeout(() => {
+                // Fetch customers again to get the latest data
+                fetchCustomers().then(() => {
+                  // Try to find the newly added customer
+                  const newCustomer = customers.find(c => c.contact_id === contact.id);
+                  if (newCustomer) {
+                    setSelectedCustomer(newCustomer);
+                    setShowDetails(true);
+                  }
+                });
+              }, 1000);
+            });
           }}
           businessId={currentBusinessId || ''}
         />
@@ -488,7 +516,8 @@ export default function Customers() {
       {showStatusUpdate && selectedOrder && (
         <OrderStatusUpdate
           orderId={selectedOrder}
-          businessId={currentBusinessId}
+          businessId={currentBusinessId || ''}
+          currentStatus={getOrderStatus(selectedOrder)}
           onClose={() => setShowStatusUpdate(false)}
           onUpdate={fetchCustomerOrders}
         />

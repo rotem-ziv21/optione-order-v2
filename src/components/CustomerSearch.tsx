@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 import { searchContacts, CRMContact } from '../lib/crm-api';
 import { supabase } from '../lib/supabase';
 
 interface CustomerSearchProps {
   onClose: () => void;
-  onCustomerSelect: () => void;
+  onCustomerSelect: (contact: CRMContact) => void;
   businessId: string;
 }
 
@@ -14,6 +14,7 @@ export default function CustomerSearch({ onClose, onCustomerSelect, businessId }
   const [searching, setSearching] = useState(false);
   const [contacts, setContacts] = useState<CRMContact[]>([]);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState<any>(null);
 
   const handleSearch = async () => {
     if (!searchTerm) return;
@@ -45,18 +46,92 @@ export default function CustomerSearch({ onClose, onCustomerSelect, businessId }
         throw new Error('לא נמצא עסק פעיל');
       }
 
-      const { error } = await supabase
+      // Get current user info for debugging
+      const { data: userData } = await supabase.auth.getUser();
+      console.log('Current user:', userData?.user);
+      console.log('Business ID:', businessId);
+      
+      // Check if user has admin role for this business
+      const { data: staffData, error: staffError } = await supabase
+        .from('business_staff')
+        .select('*')
+        .eq('user_id', userData?.user?.id)
+        .eq('business_id', businessId)
+        .eq('status', 'active');
+      
+      console.log('Staff data:', staffData);
+      if (staffError) console.error('Staff query error:', staffError);
+      
+      // Check if user is business owner
+      const { data: businessData, error: businessError } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', businessId)
+        .eq('owner_id', userData?.user?.id);
+      
+      console.log('Business owner data:', businessData);
+      if (businessError) console.error('Business query error:', businessError);
+      
+      // Store debug info for display
+      setDebugInfo({
+        user: userData?.user,
+        businessId,
+        isStaff: staffData && staffData.length > 0,
+        staffRole: staffData && staffData.length > 0 ? staffData[0].role : null,
+        isOwner: businessData && businessData.length > 0
+      });
+
+      // First check if the customer already exists
+      const { data: existingCustomer } = await supabase
         .from('customers')
-        .insert([{
-          contact_id: contact.id,
-          name: `${contact.firstNameLowerCase} ${contact.lastNameLowerCase}`.trim(),
-          email: contact.email,
-          business_id: businessId
-        }]);
+        .select('*')
+        .eq('contact_id', contact.id)
+        .eq('business_id', businessId);
+      
+      if (existingCustomer && existingCustomer.length > 0) {
+        console.log('Customer already exists:', existingCustomer[0]);
+        // Even if customer exists, we should still notify the parent component
+        onCustomerSelect(contact);
+        return;
+      }
 
-      if (error) throw error;
+      // Try using RPC function instead of direct insert to bypass RLS
+      try {
+        const { error: rpcError } = await supabase.rpc('add_customer', {
+          p_contact_id: contact.id,
+          p_name: `${contact.firstNameLowerCase} ${contact.lastNameLowerCase}`.trim(),
+          p_email: contact.email,
+          p_business_id: businessId
+        });
 
-      onCustomerSelect();
+        if (rpcError) {
+          console.error('RPC error:', rpcError);
+          throw rpcError;
+        }
+      } catch (rpcError) {
+        console.log('RPC method failed, falling back to direct insert');
+        
+        // Fall back to direct insert if RPC fails
+        const { error } = await supabase
+          .from('customers')
+          .insert([{
+            contact_id: contact.id,
+            name: `${contact.firstNameLowerCase} ${contact.lastNameLowerCase}`.trim(),
+            email: contact.email,
+            business_id: businessId
+          }]);
+
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
+      }
+
+      // Add a small delay to ensure the database has time to process the insert
+      // before we fetch the customers again
+      setTimeout(() => {
+        onCustomerSelect(contact);
+      }, 500);
     } catch (error) {
       console.error('Error adding customer:', error);
       setError('שגיאה בהוספת הלקוח. אנא נסה שוב.');
@@ -98,6 +173,12 @@ export default function CustomerSearch({ onClose, onCustomerSelect, businessId }
 
           {error && (
             <div className="text-red-600 mb-4">{error}</div>
+          )}
+
+          {debugInfo && (
+            <div className="mb-4 p-3 bg-gray-100 rounded text-xs overflow-auto max-h-40">
+              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+            </div>
           )}
 
           {contacts.length > 0 && (
