@@ -6,6 +6,9 @@ import { format, startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay } fro
 import type { DateRange } from 'react-day-picker';
 import DateRangeFilter from '../components/DateRangeFilter';
 import StaffStats from '../components/StaffStats';
+import SalesDistributionChart from '../components/SalesDistributionChart';
+import ProductsByStaffTable from '../components/ProductsByStaffTable';
+import MonthlySalesTarget from '../components/MonthlySalesTarget';
 import { utils, writeFile } from 'xlsx';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -583,9 +586,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Staff Stats */}
+      <div className="mt-6">
+        <MonthlySalesTarget />
+      </div>
+
       <div className="mt-6">
         <StaffStats />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SalesDistributionChart />
+        <div className="lg:col-span-2">
+          <ProductsByStaffTable />
+        </div>
       </div>
     </div>
   );
