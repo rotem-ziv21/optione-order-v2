@@ -3,12 +3,11 @@ import { supabase } from '../lib/supabase';
 import { Award, TrendingUp, CreditCard, DollarSign } from 'lucide-react';
 
 interface StaffStats {
-  user_id: string;
-  email: string;
+  staff_id: string;
+  staff_name: string;
   total_orders: number;
   total_amount: number;
   avg_order_value: number;
-  largest_order: number;
 }
 
 export default function StaffStats() {
@@ -50,24 +49,24 @@ export default function StaffStats() {
 
       const { data: staffMember } = await supabase
         .from('business_staff')
-        .select('user_id')
-        .eq('business_id', currentBusinessId)
+        .select('role')
         .eq('user_id', user?.id)
+        .eq('business_id', currentBusinessId)
         .single();
-
-      setHasAccess(!!staffMember);
+      
+      // בדיקה אם המשתמש הוא מנהל עסק
+      const isBusinessAdmin = staffMember?.role === 'admin';
+      
+      setHasAccess(isBusinessAdmin || isSuperAdmin);
     };
-
+    
     checkAccess();
   }, [currentBusinessId]);
 
   const getCurrentBusiness = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('משתמש לא מחובר');
-        return;
-      }
+      if (!user) return;
 
       if (user.email === 'rotemziv7766@gmail.com' || user.email === 'rotem@optionecrm.com') {
         const { data: businesses } = await supabase
@@ -93,153 +92,183 @@ export default function StaffStats() {
       }
     } catch (error) {
       console.error('Error getting current business:', error);
-      setError('שגיאה בטעינת העסק');
     }
   };
 
   const fetchStaffStats = async () => {
-    if (!hasAccess) return;
-
+    if (!currentBusinessId) return;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const isSuperAdmin = user?.email === 'rotemziv7766@gmail.com';
-
-      // קבלת כל ההזמנות ששולמו עם פרטי המשתמש
-      const { data: orders, error: ordersError } = await supabase
-        .from('customer_orders')
-        .select('created_by, total_amount, status, business_id')
-        .eq('status', 'completed');
-
-      if (ordersError) throw ordersError;
-
-      // סינון הזמנות לפי הרשאות
-      const filteredOrders = isSuperAdmin 
-        ? orders 
-        : orders.filter(order => order.business_id === currentBusinessId);
-
-      // קבלת פרטי המשתמשים
-      const userIds = [...new Set(filteredOrders.map(order => order.created_by))];
-      const { data: users, error: usersError } = await supabase
-        .rpc('get_users_by_ids', {
-          user_ids: userIds
+      setLoading(true);
+      
+      // שימוש בפונקציה החדשה get_staff_sales_stats
+      const { data, error: statsError } = await supabase
+        .rpc('get_staff_sales_stats', {
+          p_business_id: currentBusinessId
         });
-
-      if (usersError) throw usersError;
-
-      // יצירת מפה של משתמשים לגישה מהירה
-      const userMap = new Map(users.map(user => [user.id, user]));
-
-      // עיבוד הנתונים לסטטיסטיקות לפי נציג
-      const statsMap = new Map<string, StaffStats>();
-
-      filteredOrders.forEach(order => {
-        const userId = order.created_by;
-        const user = userMap.get(userId);
-        const email = user?.email || 'לא ידוע';
-        const amount = Number(order.total_amount || 0);
-        
-        if (!statsMap.has(userId)) {
-          statsMap.set(userId, {
-            user_id: userId,
-            email: email,
-            total_orders: 0,
-            total_amount: 0,
-            avg_order_value: 0,
-            largest_order: 0
-          });
-        }
-
-        const stats = statsMap.get(userId)!;
-        stats.total_orders++;
-        stats.total_amount += amount;
-        stats.largest_order = Math.max(stats.largest_order, amount);
-      });
-
-      // חישוב ממוצע לכל נציג
-      statsMap.forEach(stats => {
-        stats.avg_order_value = stats.total_amount / stats.total_orders;
-      });
-
-      // מיון לפי סכום כולל
-      const sortedStats = Array.from(statsMap.values())
-        .sort((a, b) => b.total_amount - a.total_amount);
-
-      setStats(sortedStats);
+      
+      if (statsError) {
+        throw statsError;
+      }
+      
+      setStats(data || []);
     } catch (error) {
       console.error('Error fetching staff stats:', error);
-      setError('שגיאה בטעינת הסטטיסטיקות');
+      setError('שגיאה בטעינת נתוני אנשי צוות');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!hasAccess) {
+    return null;
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-600">טוען...</div>
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">ביצועי אנשי צוות</h2>
+        <div className="flex justify-center py-8">
+          <div className="animate-pulse text-gray-400">טוען נתונים...</div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-red-600">
-        {error}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">ביצועי אנשי צוות</h2>
+        <div className="text-red-500 p-4 text-center">{error}</div>
+      </div>
+    );
+  }
+
+  if (stats.length === 0) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">ביצועי אנשי צוות</h2>
+        <div className="text-gray-500 p-4 text-center">אין נתונים להצגה</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {!hasAccess ? (
-        <div className="text-center p-4">
-          <h2 className="text-xl font-bold text-red-600">אין הרשאות גישה</h2>
-          <p className="text-gray-600">אין לך הרשאות לצפות בדף זה</p>
-        </div>
-      ) : (
-        <>
-          <h2 className="text-2xl font-bold text-gray-900">סטטיסטיקות מכירות לפי נציג</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-            {stats.map((stat) => (
-              <div
-                key={stat.user_id}
-                className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">{stat.email}</h3>
-                  <span className="text-sm font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                    {stat.total_orders} הזמנות
-                  </span>
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">סה"כ מכירות</p>
-                    <p className="text-xl font-bold text-gray-900">
-                      ₪{stat.total_amount.toLocaleString()}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">ממוצע להזמנה</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                      ₪{stat.avg_order_value.toLocaleString()}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">הזמנה גדולה ביותר</p>
-                    <p className="text-lg font-semibold text-emerald-600">
-                      ₪{stat.largest_order.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
+    <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+      <h2 className="text-xl font-semibold mb-4">ביצועי אנשי צוות</h2>
+      
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                איש צוות
+              </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                מספר מכירות
+              </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                סה"כ מכירות
+              </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                ממוצע להזמנה
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {stats.map((staff) => (
+              <tr key={staff.staff_id}>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="font-medium text-gray-900">{staff.staff_name}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {staff.total_orders}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  ₪{staff.total_amount.toFixed(2)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  ₪{staff.avg_order_value.toFixed(2)}
+                </td>
+              </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        {/* Top Seller */}
+        {stats.length > 0 && (
+          <div className="bg-blue-50 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <Award className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-blue-600 font-medium">איש צוות מוביל</p>
+                <p className="text-sm font-semibold">{stats[0].staff_name}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-blue-600">₪{stats[0].total_amount.toFixed(2)}</p>
           </div>
-        </>
-      )}
+        )}
+        
+        {/* Most Orders */}
+        {stats.length > 0 && (
+          <div className="bg-green-50 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-green-100 p-2 rounded-full">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs text-green-600 font-medium">הכי הרבה מכירות</p>
+                <p className="text-sm font-semibold">
+                  {stats.sort((a, b) => b.total_orders - a.total_orders)[0].staff_name}
+                </p>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-green-600">
+              {stats.sort((a, b) => b.total_orders - a.total_orders)[0].total_orders} מכירות
+            </p>
+          </div>
+        )}
+        
+        {/* Highest Avg */}
+        {stats.length > 0 && (
+          <div className="bg-purple-50 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-purple-100 p-2 rounded-full">
+                <CreditCard className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs text-purple-600 font-medium">ממוצע מכירה גבוה</p>
+                <p className="text-sm font-semibold">
+                  {stats.filter(s => s.total_orders > 0).sort((a, b) => b.avg_order_value - a.avg_order_value)[0]?.staff_name || 'אין נתונים'}
+                </p>
+              </div>
+            </div>
+            <p className="mt-2 text-sm text-purple-600">
+              ₪{stats.filter(s => s.total_orders > 0).sort((a, b) => b.avg_order_value - a.avg_order_value)[0]?.avg_order_value.toFixed(2) || '0.00'}
+            </p>
+          </div>
+        )}
+        
+        {/* Total Sales */}
+        <div className="bg-yellow-50 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <div className="bg-yellow-100 p-2 rounded-full">
+              <DollarSign className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-xs text-yellow-600 font-medium">סה"כ מכירות צוות</p>
+              <p className="text-sm font-semibold">כל אנשי הצוות</p>
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-yellow-600">
+            ₪{stats.reduce((sum, staff) => sum + Number(staff.total_amount), 0).toFixed(2)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface CardcomPaymentModalProps {
   url: string;
   onClose: () => void;
   onSuccess?: () => void;
   orderId: string;
+  staffId?: string;
 }
 
-export default function CardcomPaymentModal({ url, onClose, onSuccess, orderId }: CardcomPaymentModalProps) {
+export default function CardcomPaymentModal({ url, onClose, onSuccess, orderId, staffId }: CardcomPaymentModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +24,33 @@ export default function CardcomPaymentModal({ url, onClose, onSuccess, orderId }
   const handleSuccess = async () => {
     try {
       setIsLoading(true);
+      
+      // אם יש מזהה של איש צוות, נסה לעדכן את ההזמנה
+      if (staffId) {
+        try {
+          // בדוק אם העמודה staff_id קיימת
+          const { error: testError } = await supabase
+            .from('customer_orders')
+            .select('staff_id')
+            .limit(1);
+            
+          if (!testError) {
+            // העמודה קיימת, עדכן אותה
+            const { error: updateError } = await supabase
+              .from('customer_orders')
+              .update({ staff_id: staffId })
+              .eq('id', orderId);
+              
+            if (updateError) {
+              console.error('Error updating order with staff ID:', updateError);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking staff_id column:', error);
+          // המשך גם אם זה נכשל
+        }
+      }
+      
       const { data: updatedOrder, error } = await supabase
         .from('customer_orders')
         .select('*')
@@ -34,7 +63,9 @@ export default function CardcomPaymentModal({ url, onClose, onSuccess, orderId }
         window.open(updatedOrder.receipt_url, '_blank');
       }
 
-      onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       console.error('Error fetching updated order:', error);
     } finally {

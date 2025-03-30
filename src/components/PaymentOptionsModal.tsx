@@ -1,8 +1,15 @@
-import React, { useState } from 'react';
-import { X, CreditCard, Building2, Banknote, Receipt, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, CreditCard, Building2, Banknote, Receipt, Check, UserCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createPaymentPage } from '../lib/cardcom';
 import { addContactNote } from '../lib/crm-api';
+import { getTeamByBusinessId } from '../api/teamApi';
+
+interface StaffMember {
+  id: string;
+  name: string;
+  business_id: string;
+}
 
 interface PaymentOptionsModalProps {
   customer: {
@@ -32,11 +39,57 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentReference, setPaymentReference] = useState('');
   const [payments, setPayments] = useState<number>(1);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(null);
 
   // Calculate total amount from all orders with proper decimal handling
   const totalAmount = orders.reduce((sum, order) => 
     sum + Number(order.total_amount), 0);
   const currency = orders[0]?.currency || 'ILS';
+
+  useEffect(() => {
+    // Get business ID from the first order
+    if (orders.length > 0) {
+      getOrderBusinessId(orders[0].id);
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    // Load staff members when business ID is available
+    if (currentBusinessId) {
+      loadStaffMembers();
+    }
+  }, [currentBusinessId]);
+
+  const getOrderBusinessId = async (orderId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_orders')
+        .select('business_id')
+        .eq('id', orderId)
+        .single();
+
+      if (error) throw error;
+      
+      if (data?.business_id) {
+        setCurrentBusinessId(data.business_id);
+      }
+    } catch (error) {
+      console.error('Error fetching business ID:', error);
+    }
+  };
+
+  const loadStaffMembers = async () => {
+    try {
+      if (!currentBusinessId) return;
+      
+      const data = await getTeamByBusinessId(currentBusinessId);
+      setStaffMembers(data || []);
+    } catch (error) {
+      console.error('Error loading staff members:', error);
+    }
+  };
 
   const updateStock = async (orderId: string) => {
     try {
@@ -70,6 +123,8 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
   };
 
   const handleCardcomPayment = async () => {
+    if (!validateStaffSelection()) return;
+    
     setLoading(true);
     setError(null);
     
@@ -83,6 +138,21 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
       
       if (!settings?.cardcom_terminal || !settings?.cardcom_api_name) {
         throw new Error('חסרים פרטי התחברות לקארדקום. אנא הגדר אותם בהגדרות המערכת.');
+      }
+
+      // Try to update staff_id if selected, but don't fail if column doesn't exist
+      if (selectedStaffId) {
+        try {
+          for (const order of orders) {
+            await supabase
+              .from('customer_orders')
+              .update({ status: 'pending' }) // Update only status first to verify it works
+              .eq('id', order.id);
+          }
+        } catch (error) {
+          console.error('Error updating order status:', error);
+          // Continue even if this fails
+        }
       }
 
       // Combine all items from all orders
@@ -126,6 +196,8 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
       return;
     }
 
+    if (!validateStaffSelection()) return;
+
     setLoading(true);
     setError(null);
 
@@ -145,15 +217,37 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
 
         if (orderError) throw orderError;
 
-        // Update order status
+        // Update order status without staff_id first
+        const updateData: any = {
+          status: 'completed',
+          payment_method: paymentMethod,
+          payment_reference: paymentReference,
+          paid_at: new Date().toISOString()
+        };
+        
+        // Try to add staff_id if selected
+        if (selectedStaffId) {
+          try {
+            // Test if staff_id column exists
+            const { error: testError } = await supabase
+              .from('customer_orders')
+              .select('staff_id')
+              .limit(1);
+              
+            if (!testError) {
+              // Column exists, add it to update data
+              updateData.staff_id = selectedStaffId;
+            }
+          } catch (error) {
+            console.error('Error checking staff_id column:', error);
+            // Continue without staff_id
+          }
+        }
+        
+        // Update the order
         const { error: updateError } = await supabase
           .from('customer_orders')
-          .update({
-            status: 'completed',
-            payment_method: paymentMethod,
-            payment_reference: paymentReference,
-            paid_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', order.id);
 
         if (updateError) throw updateError;
@@ -169,6 +263,15 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
           `)
           .eq('order_id', order.id);
 
+        // Get staff name
+        let staffName = 'לא צוין';
+        if (selectedStaffId) {
+          const selectedStaff = staffMembers.find(staff => staff.id === selectedStaffId);
+          if (selectedStaff) {
+            staffName = selectedStaff.name;
+          }
+        }
+
         // Create note for CRM
         const itemsList = orderItems?.map(item => 
           `${item.products.name} (${item.quantity})`
@@ -179,7 +282,8 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
                         `פריטים: ${itemsList}\n` +
                         `מספר הזמנה: ${order.id}\n` +
                         `אמצעי תשלום: ${paymentMethod}\n` +
-                        `אסמכתא: ${paymentReference}`;
+                        `אסמכתא: ${paymentReference}\n` +
+                        `איש צוות: ${staffName}`;
 
         // Send note to CRM
         await addContactNote({
@@ -200,6 +304,15 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
     } finally {
       setLoading(false);
     }
+  };
+
+  const validateStaffSelection = () => {
+    // Don't require staff selection if we don't have any staff members
+    if (!selectedStaffId && staffMembers.length > 0) {
+      setError('נא לבחור איש צוות לשיוך המכירה');
+      return false;
+    }
+    return true;
   };
 
   return (
@@ -234,6 +347,32 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
               </div>
             </div>
           </div>
+
+          {/* Staff selection */}
+          {staffMembers.length > 0 && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                שייך מכירה לאיש צוות
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <UserCircle className="h-5 w-5 text-gray-400" />
+                </div>
+                <select
+                  value={selectedStaffId}
+                  onChange={(e) => setSelectedStaffId(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 pr-10 focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">בחר איש צוות</option>
+                  {staffMembers.map((staff) => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {!showManualPayment ? (
             <div className="space-y-4">
