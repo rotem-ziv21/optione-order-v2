@@ -13,6 +13,7 @@ import BusinessManagement from './pages/BusinessManagement';
 import Admin from './pages/Admin';
 import Automations from './pages/automations';
 import Staff from './pages/Staff';
+import WebhookTest from './pages/WebhookTest';
 import { Toaster } from 'react-hot-toast';
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ function AppRoutes() {
         <Route path="admin" element={<Admin />} />
         <Route path="automations" element={<Automations />} />
         <Route path="staff" element={<Staff />} />
+        <Route path="webhook-test" element={<WebhookTest />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
