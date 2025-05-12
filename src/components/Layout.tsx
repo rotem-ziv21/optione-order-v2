@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, FileText, Settings, LogOut, Building2, Shield, Workflow, Link } from 'lucide-react';
+import { LayoutDashboard, Package, Users, FileText, Settings, LogOut, Building2, Shield, Workflow } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthProvider';
 
@@ -10,7 +10,6 @@ const baseNavItems = [
   { to: '/customers', icon: Users, label: 'לקוחות' },
   { to: '/quotes', icon: FileText, label: 'הצעות מחיר' },
   { to: '/automations', icon: Workflow, label: 'אוטומציות' },
-  { to: '/webhook-test', icon: Link, label: 'בדיקת Webhooks' },
   { to: '/settings', icon: Settings, label: 'הגדרות' },
   { to: '/staff', icon: Users, label: 'אנשי צוות' },
 ];
