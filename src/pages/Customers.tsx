@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, UserPlus, ShoppingBag } from 'lucide-react';
+import { Search, UserPlus, ShoppingBag, Users, UserCheck, CreditCard, Tag, Filter, RefreshCw, Download, X, Edit, Eye } from 'lucide-react';
 import CustomerProductForm from '../components/CustomerProductForm';
 import CustomerSearch from '../components/CustomerSearch';
 import CustomerDetails from '../components/CustomerDetails';
@@ -8,7 +8,6 @@ import OrderStatusUpdate from '../components/OrderStatusUpdate';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useCardcomCallback } from '../hooks/useCardcomCallback';
-import type { CRMContact } from '../lib/crm-api';
 
 interface Product {
   id: string;
@@ -178,7 +177,7 @@ export default function Customers() {
         const items = orderItems
           ?.filter(item => item.order_id === order.id)
           .map(item => ({
-            product_name: item.products?.name || 'Unknown Product',
+            product_name: item.products ? item.products.name : 'Unknown Product',
             quantity: item.quantity,
             price_at_time: item.price_at_time,
             currency: item.currency
@@ -289,165 +288,370 @@ export default function Customers() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-600">טוען...</div>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+        <div className="text-gray-600 font-medium">טוען נתוני לקוחות...</div>
       </div>
     );
   }
 
+  // Calculate statistics
+  const totalCustomers = customers.length;
+  const totalOrders = Object.values(customerOrders).reduce((sum, orders) => sum + orders.length, 0);
+  const totalRevenue = Object.values(customerOrders).reduce((sum, orders) => {
+    return sum + orders.reduce((orderSum, order) => orderSum + order.total_amount, 0);
+  }, 0);
+  const activeCustomers = Object.keys(customerOrders).filter(id => customerOrders[id].length > 0).length;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div className="relative">
+    <div className="space-y-6" dir="rtl">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl shadow-sm p-4 border border-purple-100">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-purple-600 mb-1">סה"כ לקוחות</p>
+              <h3 className="text-2xl font-bold text-gray-800">{totalCustomers}</h3>
+            </div>
+            <div className="bg-purple-100 p-2 rounded-lg">
+              <Users className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            <span className="text-green-500 font-medium">{activeCustomers}</span> לקוחות פעילים
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl shadow-sm p-4 border border-blue-100">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-blue-600 mb-1">לקוחות פעילים</p>
+              <h3 className="text-2xl font-bold text-gray-800">
+                {activeCustomers}
+              </h3>
+            </div>
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <UserCheck className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 100) : 0}% מסך הלקוחות
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm p-4 border border-green-100">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-green-600 mb-1">סה"כ הזמנות</p>
+              <h3 className="text-2xl font-bold text-gray-800">
+                {totalOrders}
+              </h3>
+            </div>
+            <div className="bg-green-100 p-2 rounded-lg">
+              <ShoppingBag className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {totalCustomers > 0 ? (totalOrders / totalCustomers).toFixed(1) : 0} הזמנות ללקוח
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl shadow-sm p-4 border border-amber-100">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-sm font-medium text-amber-600 mb-1">סה"כ הכנסות</p>
+              <h3 className="text-2xl font-bold text-gray-800">
+                ₪{totalRevenue.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </h3>
+            </div>
+            <div className="bg-amber-100 p-2 rounded-lg">
+              <CreditCard className="w-6 h-6 text-amber-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {activeCustomers > 0 ? `₪${(totalRevenue / activeCustomers).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '₪0'} ממוצע ללקוח
+          </div>
+        </div>
+      </div>
+
+      {/* Search and actions bar */}
+      <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="relative w-full md:w-auto">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
             placeholder="חיפוש לקוחות..."
-            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full md:w-80 pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:bg-white transition-all duration-200"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             dir="rtl"
           />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-        <button 
-          onClick={() => setShowSearch(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700"
-        >
-          <UserPlus className="w-5 h-5" />
-          <span>הוסף לקוח</span>
-        </button>
+
+        <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
+          <button className="text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2.5 rounded-lg transition-colors">
+            <Filter className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => {
+              fetchCustomers();
+              fetchCustomerOrders();
+            }}
+            className="text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2.5 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+          <button className="text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2.5 rounded-lg transition-colors">
+            <Download className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setShowSearch(true)}
+            className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center space-x-2 hover:from-purple-700 hover:to-indigo-700 shadow-sm transition-all duration-200 mr-2"
+          >
+            <UserPlus className="w-5 h-5" />
+            <span>הוסף לקוח</span>
+          </button>
+        </div>
       </div>
 
       {/* Customers Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                לקוח
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                מזהה איש קשר
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                סה"כ הזמנות
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                סה"כ רכישות
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                פעולות
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredCustomers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                  {searchTerm ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
-                </td>
-              </tr>
-            ) : (
-              filteredCustomers.map((customer) => {
-                const customerOrdersList = customerOrders[customer.contact_id] || [];
-                const totalSpent = customerOrdersList.reduce((sum, order) => sum + order.total_amount, 0);
-                
-                return (
-                  <tr key={customer.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div 
-                        className="cursor-pointer hover:text-blue-600"
-                        onClick={() => handleCustomerClick(customer)}
-                      >
-                        <div className="text-sm font-medium text-gray-900">{customer.name}</div>
-                        <div className="text-sm text-gray-500">{customer.email}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900">{customer.contact_id}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900">{customerOrdersList.length}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900">₪{totalSpent.toFixed(2)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={() => {
-                          setSelectedCustomer(customer);
-                          setShowProductForm(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 ml-3"
-                        title="הוספת מוצרים"
-                      >
-                        <ShoppingBag className="w-5 h-5" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Orders Table */}
-      {selectedCustomer && customerOrders[selectedCustomer.contact_id] && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">הזמנות של {selectedCustomer.name}</h3>
-          </div>
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+        <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  מספר הזמנה
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center justify-end">
+                  <span className="ml-1">לקוח</span>
+                  <UserCheck className="w-4 h-4 text-gray-400" />
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  תאריך
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <div className="flex items-center justify-end">
+                    <span className="ml-1">מזהה איש קשר</span>
+                    <Tag className="w-4 h-4 text-gray-400" />
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  סכום
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <div className="flex items-center justify-end">
+                    <span className="ml-1">סה"כ הזמנות</span>
+                    <ShoppingBag className="w-4 h-4 text-gray-400" />
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  סטטוס
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <div className="flex items-center justify-end">
+                    <span className="ml-1">סה"כ רכישות</span>
+                    <CreditCard className="w-4 h-4 text-gray-400" />
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   פעולות
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {customerOrders[selectedCustomer.contact_id].map((order) => (
-                <tr key={order.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">{order.id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">
-                      {format(new Date(order.created_at), 'dd/MM/yyyy')}
+            <tbody className="bg-white divide-y divide-gray-100">
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="bg-gray-100 p-3 rounded-full">
+                        <Search className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 font-medium">
+                        {searchTerm ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+                      </p>
+                      {searchTerm && (
+                        <button 
+                          onClick={() => setSearchTerm('')}
+                          className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                        >
+                          נקה חיפוש
+                        </button>
+                      )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">₪{order.total_amount.toFixed(2)}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="text-sm text-gray-900">{order.status}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={() => handleStatusUpdate(order.id)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      עדכון סטטוס
-                    </button>
-                  </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCustomers.map((customer) => {
+                  const customerOrdersList = customerOrders[customer.contact_id] || [];
+                  const totalSpent = customerOrdersList.reduce((sum, order) => sum + order.total_amount, 0);
+                  const hasOrders = customerOrdersList.length > 0;
+                  
+                  return (
+                    <tr key={customer.id} className="hover:bg-purple-50/30 transition-colors duration-150">
+                      <td className="px-6 py-4 text-right">
+                        <div 
+                          className="cursor-pointer group"
+                          onClick={() => handleCustomerClick(customer)}
+                        >
+                          <div className="font-medium text-gray-900 group-hover:text-purple-700 transition-colors">{customer.name}</div>
+                          <div className="text-sm text-gray-500">{customer.email}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-md inline-block">{customer.contact_id}</div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className={`text-sm font-medium px-2.5 py-1 rounded-full inline-flex items-center justify-center ${hasOrders ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {customerOrdersList.length}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="text-sm font-medium text-gray-900">
+                          ₪{totalSpent.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button 
+                            onClick={() => handleCustomerClick(customer)}
+                            className="text-blue-600 hover:text-blue-900 bg-blue-100 p-2 rounded-lg hover:bg-blue-200 transition-colors mr-2"
+                            title="צפייה בפרטים"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedCustomer(customer);
+                              setShowProductForm(true);
+                            }}
+                            className="text-purple-600 hover:text-purple-900 bg-purple-100 p-2 rounded-lg hover:bg-purple-200 transition-colors mr-2"
+                            title="הוספת מוצרים"
+                          >
+                            <ShoppingBag className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedCustomer(customer);
+                              setShowEdit(true);
+                            }}
+                            className="text-amber-600 hover:text-amber-900 bg-amber-100 p-2 rounded-lg hover:bg-amber-200 transition-colors"
+                            title="עריכת לקוח"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
+        </div>
+        
+        {filteredCustomers.length > 0 && (
+          <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-right">
+            <p className="text-sm text-gray-600">
+              מציג <span className="font-medium">{filteredCustomers.length}</span> מתוך <span className="font-medium">{customers.length}</span> לקוחות
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Orders Table */}
+      {selectedCustomer && customerOrders[selectedCustomer.contact_id] && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-6 border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <button
+              onClick={() => setSelectedCustomer(null)}
+              className="text-gray-500 hover:text-gray-700 text-sm flex items-center"
+            >
+              <X className="w-4 h-4 mr-1" />
+              סגור
+            </button>
+            <h3 className="text-lg font-medium text-gray-900">הזמנות של {selectedCustomer.name}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    מספר הזמנה
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    תאריך
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    סכום
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    סטטוס
+                  </th>
+                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    פעולות
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {customerOrders[selectedCustomer.contact_id].length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      אין הזמנות ללקוח זה
+                    </td>
+                  </tr>
+                ) : (
+                  customerOrders[selectedCustomer.contact_id].map((order) => {
+                    const statusClass = {
+                      pending: 'bg-amber-100 text-amber-800',
+                      completed: 'bg-green-100 text-green-800',
+                      cancelled: 'bg-red-100 text-red-800'
+                    }[order.status] || 'bg-gray-100 text-gray-800';
+                    
+                    return (
+                      <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-150">
+                        <td className="px-6 py-4 text-right">
+                          <div className="text-sm font-medium text-gray-900">{order.id.substring(0, 8)}...</div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="text-sm text-gray-700">
+                            {format(new Date(order.created_at), 'dd/MM/yyyy')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="text-sm font-medium text-gray-900">
+                            ₪{order.total_amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+                            {{
+                              pending: 'בהמתנה',
+                              completed: 'הושלם',
+                              cancelled: 'בוטל'
+                            }[order.status] || order.status}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleStatusUpdate(order.id)}
+                            className="text-purple-600 hover:text-purple-900 bg-purple-100 p-2 rounded-lg hover:bg-purple-200 transition-colors"
+                            title="עדכון סטטוס"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          {customerOrders[selectedCustomer.contact_id].length > 0 && (
+            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-right">
+              <p className="text-sm text-gray-600">
+                סה"כ <span className="font-medium">{customerOrders[selectedCustomer.contact_id].length}</span> הזמנות
+              </p>
+            </div>
+          )}
         </div>
       )}
 
