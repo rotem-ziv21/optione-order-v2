@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { X, Save, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import * as Icons from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { supabase } from '../lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const currencies = [
   { code: 'USD', symbol: '$', name: 'דולר אמריקאי' },
@@ -130,46 +131,72 @@ export default function ProductForm({ onClose, onSubmit, initialData, mode = 'cr
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
+          <h2 className="text-xl font-bold">
             {mode === 'create' ? 'הוספת מוצר חדש' : 'עריכת מוצר'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-500"
+            className="text-white/80 hover:text-white hover:bg-white/20 rounded-full p-1 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <Icons.X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="p-6 space-y-4">
-          {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-600">{serverError}</p>
-            </div>
-          )}
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="p-6 space-y-6">
+          <AnimatePresence>
+            {serverError && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-red-50 border-r-4 border-red-500 rounded-lg p-4 flex items-start space-x-3 rtl:space-x-reverse shadow-sm"
+              >
+                <Icons.AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 ml-2 rtl:ml-0 rtl:mr-2" />
+                <p className="text-sm text-red-600">{serverError}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+          <div className="relative">
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <Icons.Package className="w-4 h-4 ml-1.5 text-purple-500" />
               שם המוצר
             </label>
             <input
               type="text"
               id="name"
               {...register('name')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="block w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/50 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm"
               dir="rtl"
+              placeholder="הזן שם מוצר"
             />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
-            )}
+            <AnimatePresence>
+              {errors.name && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-1.5 text-sm text-red-500 flex items-center"
+                >
+                  <Icons.AlertCircle className="w-3.5 h-3.5 ml-1 flex-shrink-0" />
+                  {errors.name.message}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div>
-            <label htmlFor="sku" className="block text-sm font-medium text-gray-700">
+          <div className="relative">
+            <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <Icons.Tag className="w-4 h-4 ml-1.5 text-purple-500" />
               מק"ט
             </label>
             <input
@@ -177,96 +204,155 @@ export default function ProductForm({ onClose, onSubmit, initialData, mode = 'cr
               id="sku"
               {...register('sku')}
               disabled={mode === 'edit'}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="block w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/50 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm disabled:bg-gray-100/80 disabled:border-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed"
               dir="rtl"
+              placeholder="הזן מקט"
             />
-            {errors.sku && (
-              <p className="mt-1 text-sm text-red-600">{errors.sku.message}</p>
-            )}
+            <AnimatePresence>
+              {errors.sku && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-1.5 text-sm text-red-500 flex items-center"
+                >
+                  <Icons.AlertCircle className="w-3.5 h-3.5 ml-1 flex-shrink-0" />
+                  {errors.sku.message}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div>
-            <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+          <div className="relative">
+            <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <Icons.DollarSign className="w-4 h-4 ml-1.5 text-purple-500" />
               מחיר
             </label>
-            <input
-              type="number"
-              id="price"
-              step="0.01"
-              {...register('price', { valueAsNumber: true })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              dir="rtl"
-            />
-            {errors.price && (
-              <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
-            )}
+            <div className="relative">
+              <input
+                type="number"
+                id="price"
+                step="0.01"
+                {...register('price', { valueAsNumber: true })}
+                className="block w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/50 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm"
+                dir="rtl"
+                placeholder="0.00"
+              />
+            </div>
+            <AnimatePresence>
+              {errors.price && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-1.5 text-sm text-red-500 flex items-center"
+                >
+                  <Icons.AlertCircle className="w-3.5 h-3.5 ml-1 flex-shrink-0" />
+                  {errors.price.message}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div>
-            <label htmlFor="currency" className="block text-sm font-medium text-gray-700">
+          <div className="relative">
+            <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <Icons.DollarSign className="w-4 h-4 ml-1.5 text-purple-500" />
               מטבע
             </label>
-            <select
-              id="currency"
-              {...register('currency')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              dir="rtl"
-            >
-              {currencies.map((currency) => (
-                <option key={currency.code} value={currency.code}>
-                  {currency.name} ({currency.symbol})
-                </option>
-              ))}
-            </select>
-            {errors.currency && (
-              <p className="mt-1 text-sm text-red-600">{errors.currency.message}</p>
-            )}
+            <div className="relative">
+              <select
+                id="currency"
+                {...register('currency')}
+                className="block w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/50 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm appearance-none"
+                dir="rtl"
+              >
+                {currencies.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.name} ({currency.symbol})
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-3 text-gray-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+            <AnimatePresence>
+              {errors.currency && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-1.5 text-sm text-red-500 flex items-center"
+                >
+                  <Icons.AlertCircle className="w-3.5 h-3.5 ml-1 flex-shrink-0" />
+                  {errors.currency.message}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div>
-            <label htmlFor="stock" className="block text-sm font-medium text-gray-700">
+          <div className="relative">
+            <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <Icons.BarChart3 className="w-4 h-4 ml-1.5 text-purple-500" />
               מלאי
             </label>
             <input
               type="number"
               id="stock"
               {...register('stock', { valueAsNumber: true })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="block w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white/50 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm"
               dir="rtl"
+              placeholder="0"
             />
-            {errors.stock && (
-              <p className="mt-1 text-sm text-red-600">{errors.stock.message}</p>
-            )}
+            <AnimatePresence>
+              {errors.stock && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-1.5 text-sm text-red-500 flex items-center"
+                >
+                  <Icons.AlertCircle className="w-3.5 h-3.5 ml-1 flex-shrink-0" />
+                  {errors.stock.message}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="flex justify-end mt-6 space-x-3">
-            <button
+          <div className="flex justify-end mt-8 space-x-3 rtl:space-x-reverse">
+            <motion.button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
             >
               ביטול
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="submit"
               disabled={submitting}
-              className="inline-flex justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex justify-center items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 border border-transparent rounded-lg shadow-sm hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-60 disabled:cursor-not-allowed disabled:from-purple-500 disabled:to-indigo-500 transition-all duration-200"
             >
               {submitting ? (
                 <span className="inline-flex items-center">
-                  <svg className="w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
+                  <Icons.Loader2 className="w-4 h-4 ml-2 animate-spin" />
                   שומר...
                 </span>
               ) : (
-                'שמור'
+                <span className="inline-flex items-center">
+                  <Icons.Save className="w-4 h-4 ml-2" />
+                  שמור
+                </span>
               )}
-            </button>
+            </motion.button>
           </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

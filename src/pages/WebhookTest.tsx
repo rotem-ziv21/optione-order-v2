@@ -3,6 +3,7 @@ import { useAuth } from '../components/AuthProvider';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { validateWebhooksTable, triggerProductPurchasedWebhooks } from '../services/webhookService';
+import webhookEdgeService from '../services/webhookEdgeService';
 
 interface Product {
   id: string;
@@ -109,6 +110,52 @@ export default function WebhookTest() {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
   };
 
+  // פונקציה לשליחת webhook באמצעות פונקציית Edge
+  const handleTestWebhookViaEdge = async () => {
+    setIsLoading(true);
+    setWebhookResponses([]);
+    addLog(`מתחיל בדיקת webhook באמצעות Edge Function...`);
+    
+    try {
+      // שליחת הבקשה לפונקציית Edge
+      addLog(`שולח בקשה לפונקציית Edge עם מזהה הזמנה: ${testOrderId}`);
+      
+      const { data, error } = await webhookEdgeService.sendOrderWebhooks(testOrderId);
+      
+      if (error) {
+        addLog(`שגיאה בשליחת webhook: ${error}`);
+        toast.error(`שגיאה בשליחת webhook: ${error}`);
+      } else {
+        addLog(`Webhook נשלח בהצלחה באמצעות Edge Function`);
+        addLog(`תוצאה: ${JSON.stringify(data)}`);
+        toast.success('Webhook נשלח בהצלחה');
+        
+        // הוספת התגובות לרשימת התגובות
+        if (data && data.results) {
+          const responses = Array.isArray(data.results) ? data.results : [data.results];
+          
+          responses.forEach((result: any) => {
+            setWebhookResponses(prev => [
+              ...prev,
+              {
+                url: result.url,
+                status: result.status,
+                response: result.success ? 'Success' : (result.error || 'Unknown error'),
+                error: result.success ? null : (result.error || 'Unknown error')
+              }
+            ]);
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error sending webhook via Edge Function:', error);
+      addLog(`שגיאה בשליחת webhook: ${error.message || 'Unknown error'}`);
+      toast.error(`שגיאה בשליחת webhook: ${error.message || 'Unknown error'}`);
+    }
+    
+    setIsLoading(false);
+  };
+  
   const checkSystem = async () => {
     setIsLoading(true);
     addLog('בודק את מערכת ה-webhooks...');
@@ -620,13 +667,29 @@ ADD COLUMN product_id UUID REFERENCES products(id) NULL;`}
           )}
         </div>
         
-        <div className="flex space-x-2 space-x-reverse">
+        <div className="flex flex-col space-y-4 mt-4">
           <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             onClick={handleTestWebhook}
-            disabled={isLoading || (isTableValid === false && !directUrl)}
+            disabled={isLoading || (!selectedProduct && !directUrl)}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'שולח...' : 'שלח webhook לבדיקה'}
+            {isLoading ? 'שולח...' : 'שלח Webhook'}
+          </button>
+          
+          <button
+            onClick={handleTestWebhookViaEdge}
+            disabled={isLoading}
+            className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            שלח Webhook באמצעות Edge Function
+          </button>
+          
+          <button
+            onClick={checkSystem}
+            disabled={isLoading}
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            בדוק מערכת
           </button>
           
           <button
