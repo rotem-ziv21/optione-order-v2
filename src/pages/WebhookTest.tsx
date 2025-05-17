@@ -3,7 +3,6 @@ import { useAuth } from '../components/AuthProvider';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { validateWebhooksTable, triggerProductPurchasedWebhooks } from '../services/webhookService';
-import webhookEdgeService from '../services/webhookEdgeService';
 
 interface Product {
   id: string;
@@ -110,52 +109,7 @@ export default function WebhookTest() {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
   };
 
-  // פונקציה לשליחת webhook באמצעות פונקציית Edge
-  const handleTestWebhookViaEdge = async () => {
-    setIsLoading(true);
-    setWebhookResponses([]);
-    addLog(`מתחיל בדיקת webhook באמצעות Edge Function...`);
-    
-    try {
-      // שליחת הבקשה לפונקציית Edge
-      addLog(`שולח בקשה לפונקציית Edge עם מזהה הזמנה: ${testOrderId}`);
-      
-      const { data, error } = await webhookEdgeService.sendOrderWebhooks(testOrderId);
-      
-      if (error) {
-        addLog(`שגיאה בשליחת webhook: ${error}`);
-        toast.error(`שגיאה בשליחת webhook: ${error}`);
-      } else {
-        addLog(`Webhook נשלח בהצלחה באמצעות Edge Function`);
-        addLog(`תוצאה: ${JSON.stringify(data)}`);
-        toast.success('Webhook נשלח בהצלחה');
-        
-        // הוספת התגובות לרשימת התגובות
-        if (data && data.results) {
-          const responses = Array.isArray(data.results) ? data.results : [data.results];
-          
-          responses.forEach((result: any) => {
-            setWebhookResponses(prev => [
-              ...prev,
-              {
-                url: result.url,
-                status: result.status,
-                response: result.success ? 'Success' : (result.error || 'Unknown error'),
-                error: result.success ? null : (result.error || 'Unknown error')
-              }
-            ]);
-          });
-        }
-      }
-    } catch (error: any) {
-      console.error('Error sending webhook via Edge Function:', error);
-      addLog(`שגיאה בשליחת webhook: ${error.message || 'Unknown error'}`);
-      toast.error(`שגיאה בשליחת webhook: ${error.message || 'Unknown error'}`);
-    }
-    
-    setIsLoading(false);
-  };
-  
+  // פונקציה לבדיקת מערכת ה-webhooks
   const checkSystem = async () => {
     setIsLoading(true);
     addLog('בודק את מערכת ה-webhooks...');
@@ -227,256 +181,183 @@ export default function WebhookTest() {
       } else {
         addLog('טבלת לוגים תקינה');
       }
+      
     } catch (error: any) {
       console.error('Error checking system:', error);
-      addLog(`שגיאה בבדיקת המערכת: ${error.message}`);
+      addLog(`שגיאה לא צפויה: ${error.message}`);
     }
     
     setIsLoading(false);
   };
 
-  // פונקציה לבדיקת webhook עם אפשרות להתאמה אישית של ה-payload
+  // פונקציה לבדיקת webhook ישירות
   const handleTestWebhook = async () => {
     if (!selectedProduct && !directUrl) {
-      toast.error('יש לבחור מוצר או להזין כתובת URL ישירה');
+      toast.error('יש לבחור מוצר או להזין URL ישיר');
       return;
     }
-
+    
     setIsLoading(true);
     setWebhookResponses([]);
-    addLog(`מתחיל בדיקת webhook...`);
-    addLog(`מזהה הזמנה: ${testOrderId}`);
+    addLog('מתחיל בדיקת webhook...');
+    addLog(`מזהה הזמנה לבדיקה: ${testOrderId}`);
     addLog(`מזהה עסק: ${businessId}`);
-
+    
     try {
-      // יצירת payload עם הנתונים הנכונים
-      const selectedProductObj = products.find(p => p.id === selectedProduct);
-      const payload = {
-        event: 'product_purchased',
-        order_id: testOrderId,
-        product_id: selectedProduct || 'test-product-id',
-        business_id: businessId,
-        timestamp: new Date().toISOString(),
-        
-        // פרטי מוצר
-        product: {
-          id: selectedProduct || 'test-product-id',
-          name: selectedProductObj?.name || 'מוצר בדיקה',
-          price: selectedProductObj?.price || 100,
-          sku: selectedProductObj?.sku || 'SKU123',
-          currency: selectedProductObj?.currency || 'ILS'
-        },
-        
-        // פרטי לקוח - קבועים לפי הנתונים הנכונים
-        customer: {
-          id: 'customer-123',
-          name: 'ישראל ישראלי',
-          email: 'israel@example.com',
-          phone: '0501234567',
-          contact_id: 'contact-123'
-        },
-        
-        // פרטי הזמנה - קבועים לפי הנתונים הנכונים
-        order: {
-          id: testOrderId,
-          total_amount: selectedProductObj?.price || 100,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        },
-        
-        // פרטי פריט הזמנה - קבועים לפי הנתונים הנכונים
-        order_item: {
-          quantity: 1,
-          price_at_time: selectedProductObj?.price || 100
-        }
-      };
+      // בדיקה אם יש מוצר נבחר
+      const productToTest = products.find(p => p.id === selectedProduct);
       
-      // אם יש payload מותאם אישית, נשתמש בו
-      let finalPayload = payload;
-      if (customPayload && customPayload.trim() !== '') {
-        try {
-          finalPayload = JSON.parse(customPayload);
-          addLog('משתמש ב-payload מותאם אישית');
-        } catch (error: any) {
-          addLog(`שגיאה בפענוח ה-payload המותאם: ${error.message}`);
-          toast.error('שגיאה בפענוח ה-payload המותאם');
-          finalPayload = payload;
+      if (productToTest) {
+        // שליחת webhook למוצר ספציפי
+        addLog(`שולח webhook עבור מוצר: ${productToTest.name}`);
+        
+        // הכנת נתוני המוצר לשליחה
+        const orderData = {
+          order_id: testOrderId,
+          product: {
+            id: productToTest.id,
+            name: productToTest.name,
+            price: productToTest.price,
+            sku: productToTest.sku || '',
+            currency: productToTest.currency || 'ILS'
+          },
+          business_id: businessId
+        };
+        
+        // שימוש בפיילוד מותאם אישית אם קיים
+        if (customPayload && customPayload.trim() !== '') {
+          try {
+            const customData = JSON.parse(customPayload);
+            addLog('משתמש בפיילוד מותאם אישית');
+            addLog(`פיילוד: ${customPayload}`);
+            
+            const results = await triggerProductPurchasedWebhooks(testOrderId, customData);
+            
+            if (results && results.length > 0) {
+              addLog(`נשלחו ${results.length} webhooks בהצלחה`);
+              
+              results.forEach((result: any) => {
+                setWebhookResponses(prev => [
+                  ...prev,
+                  {
+                    url: result.url,
+                    status: result.status,
+                    response: result.response,
+                    error: result.error
+                  }
+                ]);
+                
+                addLog(`תוצאה עבור ${result.url}: ${result.status} ${result.error ? '(שגיאה: ' + result.error + ')' : '(הצלחה)'}`);
+              });
+            } else {
+              addLog('לא נשלחו webhooks. ייתכן שאין webhooks מוגדרים למוצר זה.');
+            }
+          } catch (error) {
+            addLog(`שגיאה בפיילוד מותאם אישית: ${error instanceof Error ? error.message : String(error)}`);
+            toast.error('שגיאה בפיילוד מותאם אישית');
+          }
+        } else {
+          // שליחת webhook עם נתוני ברירת מחדל
+          const results = await triggerProductPurchasedWebhooks(testOrderId, orderData);
+          
+          if (results && results.length > 0) {
+            addLog(`נשלחו ${results.length} webhooks בהצלחה`);
+            
+            results.forEach((result: any) => {
+              setWebhookResponses(prev => [
+                ...prev,
+                {
+                  url: result.url,
+                  status: result.status,
+                  response: result.response,
+                  error: result.error
+                }
+              ]);
+              
+              addLog(`תוצאה עבור ${result.url}: ${result.status} ${result.error ? '(שגיאה: ' + result.error + ')' : '(הצלחה)'}`);
+            });
+          } else {
+            addLog('לא נשלחו webhooks. ייתכן שאין webhooks מוגדרים למוצר זה.');
+          }
         }
-      } else {
-        addLog('משתמש ב-payload ברירת מחדל');
-      }
-      
-      // אם יש URL ישיר, נשלח אליו
-      if (directUrl) {
-        addLog(`שולח webhook ישירות ל-${directUrl}...`);
+      } else if (directUrl) {
+        // שליחה ישירה ל-URL
+        addLog(`שולח webhook ישירות ל-URL: ${directUrl}`);
+        
+        // הכנת נתוני ברירת מחדל לשליחה
+        const defaultData = {
+          order_id: testOrderId,
+          product: selectedProduct ? {
+            id: selectedProduct,
+            name: 'Test Product',
+            price: 100,
+            sku: 'TEST-SKU',
+            currency: 'ILS'
+          } : null,
+          business_id: businessId,
+          event: 'product_purchased',
+          timestamp: new Date().toISOString()
+        };
+        
         try {
+          addLog(`שולח בקשה ל-${directUrl} עם מזהה הזמנה ${testOrderId} ומזהה מוצר ${selectedProduct || 'ללא'} ומזהה עסק ${businessId}`);
+          
+          // שליחת בקשה ישירה
           const response = await fetch(directUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'X-Webhook-Source': 'optione-webhook-test'
             },
-            body: JSON.stringify(finalPayload)
+            body: JSON.stringify(customPayload ? JSON.parse(customPayload) : defaultData)
           });
           
-          // קריאת התגובה
-          let responseData: any;
-          let responseText = '';
-          try {
-            responseText = await response.text();
-            if (responseText) {
-              try {
-                responseData = JSON.parse(responseText);
-              } catch {
-                responseData = responseText;
-              }
-            }
-          } catch (error) {
-            console.error('Error reading response:', error);
-            responseData = 'Error reading response';
-          }
+          const responseData = await response.text();
           
-          // הוספת התגובה לרשימת התגובות
+          addLog(`תשובה מ-${directUrl}: ${response.status} ${response.statusText}`);
+          
           setWebhookResponses(prev => [
             ...prev,
             {
               url: directUrl,
               status: response.status,
-              response: responseData || responseText || 'No response body',
-              error: null
+              response: responseData,
+              error: response.ok ? null : 'HTTP Error: ' + response.status
             }
           ]);
           
-          addLog(`התקבלה תגובה מ-${directUrl} עם קוד סטטוס ${response.status}`);
+          if (response.ok) {
+            addLog(`הבקשה נשלחה בהצלחה ל-${directUrl}`);
+            toast.success('Webhook נשלח בהצלחה');
+          } else {
+            addLog(`שגיאה בשליחת בקשה ל-${directUrl}: ${response.status} ${response.statusText}`);
+            toast.error(`שגיאה בשליחת Webhook: ${response.status} ${response.statusText}`);
+          }
         } catch (error: any) {
-          console.error('Error sending webhook:', error);
+          console.error('Error sending direct webhook:', error);
+          addLog(`שגיאה בשליחת webhook ישיר: ${error.message}`);
+          toast.error(`שגיאה בשליחת webhook ישיר: ${error.message}`);
+          
           setWebhookResponses(prev => [
             ...prev,
             {
               url: directUrl,
               status: null,
               response: null,
-              error: error.message || 'Unknown error'
+              error: error.message
             }
           ]);
-          addLog(`שגיאה בשליחת webhook ל-${directUrl}: ${error.message || 'Unknown error'}`);
         }
-      }
-      
-      // שליחת בקשות webhook מהרשימה המוגדרת
-      if (selectedProduct) {
-        const relevantWebhooks = webhooks.filter(
-          webhook => webhook.on_product_purchased && 
-          (webhook.product_id === null || webhook.product_id === selectedProduct)
-        );
-
-        if (relevantWebhooks.length === 0) {
-          addLog(`אזהרה: לא נמצאו webhooks מוגדרים למוצר ${selectedProduct}.`);
-        } else {
-          addLog(`נמצאו ${relevantWebhooks.length} webhooks למוצר ${selectedProduct}.`);
-          addLog(`URLs: ${relevantWebhooks.map(w => w.url).join(', ')}`);
-          
-          // שליחת בקשות webhook ישירות
-          for (const webhook of relevantWebhooks) {
-            try {
-              addLog(`שולח webhook ל-${webhook.url}...`);
-              
-              // שליחת הבקשה
-              const response = await fetch(webhook.url, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(finalPayload)
-              });
-              
-              // קריאת התגובה
-              let responseData: any;
-              let responseText = '';
-              try {
-                responseText = await response.text();
-                if (responseText) {
-                  try {
-                    responseData = JSON.parse(responseText);
-                  } catch {
-                    responseData = responseText;
-                  }
-                }
-              } catch (error) {
-                console.error('Error reading response:', error);
-                responseData = 'Error reading response';
-              }
-              
-              // הוספת התגובה לרשימת התגובות
-              setWebhookResponses(prev => [
-                ...prev,
-                {
-                  url: webhook.url,
-                  status: response.status,
-                  response: responseData || responseText || 'No response body',
-                  error: null
-                }
-              ]);
-              
-              addLog(`התקבלה תגובה מ-${webhook.url} עם קוד סטטוס ${response.status}`);
-              
-              // שמירת לוג של ה-webhook
-              await supabase.from('webhook_logs').insert({
-                webhook_id: webhook.id,
-                order_id: testOrderId,
-                product_id: selectedProduct,
-                request_payload: finalPayload,
-                response_status: response.status,
-                response_body: responseText,
-                sent_at: new Date().toISOString()
-              });
-            } catch (error: any) {
-              console.error('Error sending webhook:', error);
-              setWebhookResponses(prev => [
-                ...prev,
-                {
-                  url: webhook.url,
-                  status: null,
-                  response: null,
-                  error: error.message || 'Unknown error'
-                }
-              ]);
-              addLog(`שגיאה בשליחת webhook ל-${webhook.url}: ${error.message || 'Unknown error'}`);
-              
-              // שמירת לוג של השגיאה
-              try {
-                await supabase.from('webhook_logs').insert({
-                  webhook_id: webhook.id,
-                  order_id: testOrderId,
-                  product_id: selectedProduct,
-                  request_payload: finalPayload,
-                  response_status: null,
-                  response_body: `Error: ${error.message || 'Unknown error'}`,
-                  sent_at: new Date().toISOString()
-                });
-              } catch (logError) {
-                console.error('Error saving webhook log:', logError);
-              }
-            }
-          }
-        }
-      }
-      
-      // שימוש בפונקציה מהשירות
-      if (selectedProduct) {
-        addLog(`מפעיל את פונקציית triggerProductPurchasedWebhooks עם מזהה הזמנה ${testOrderId} ומזהה מוצר ${selectedProduct}...`);
-        await triggerProductPurchasedWebhooks(testOrderId, selectedProduct, businessId || '');
-        addLog('הפעלת הפונקציה הסתיימה');
       }
     } catch (error: any) {
-      console.error('Error in handleTestWebhook:', error);
-      addLog(`שגיאה כללית: ${error.message}`);
-      toast.error('שגיאה בשליחת ה-webhook');
-    } finally {
-      setIsLoading(false);
+      console.error('Error testing webhook:', error);
+      addLog(`שגיאה לא צפויה: ${error.message}`);
+      toast.error(`שגיאה: ${error.message}`);
     }
+    
+    setIsLoading(false);
   };
-  
-  // פונקציה לניקוי הלוגים
+
   const clearLogs = () => {
     setLogs([]);
     setWebhookResponses([]);
@@ -484,272 +365,180 @@ export default function WebhookTest() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">בדיקת Webhooks</h1>
-        <a 
-          href="/webhook-history" 
-          className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors"
-        >
-          היסטוריית Webhooks
-        </a>
-      </div>
+    <div className="container mx-auto p-4 rtl">
+      <h1 className="text-2xl font-bold mb-4">בדיקת Webhooks</h1>
       
-      {isTableValid === false && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6">
-          <p className="font-bold">שגיאה במבנה טבלת ה-webhooks</p>
-          <p>יש לבצע את העדכון הבא בבסיס הנתונים:</p>
-          <pre className="bg-gray-100 p-2 mt-1 rounded text-xs overflow-x-auto">
-            {`ALTER TABLE business_webhooks 
-ADD COLUMN on_product_purchased BOOLEAN DEFAULT FALSE,
-ADD COLUMN product_id UUID REFERENCES products(id) NULL;`}
-          </pre>
-          <p className="mt-2">אם הטבלה לא קיימת כלל, יש ליצור אותה תחילה:</p>
-          <pre className="bg-gray-100 p-2 mt-1 rounded text-xs overflow-x-auto">
-            {`CREATE TABLE business_webhooks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  business_id UUID REFERENCES businesses(id) NOT NULL,
-  url TEXT NOT NULL,
-  on_order_created BOOLEAN DEFAULT FALSE,
-  on_order_paid BOOLEAN DEFAULT FALSE,
-  on_product_purchased BOOLEAN DEFAULT FALSE,
-  product_id UUID REFERENCES products(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);`}
-          </pre>
-          <p className="mt-2">כמו כן, יש ליצור טבלת לוגים:</p>
-          <pre className="bg-gray-100 p-2 mt-1 rounded text-xs overflow-x-auto">
-            {`CREATE TABLE webhook_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  webhook_id UUID REFERENCES business_webhooks(id) NOT NULL,
-  order_id TEXT,
-  product_id UUID REFERENCES products(id),
-  request_payload JSONB,
-  response_status INTEGER,
-  response_body TEXT,
-  sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);`}
-          </pre>
-        </div>
-      )}
-      
-      <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-6">
-        <h3 className="font-bold mb-2">מדריך שימוש</h3>
-        <ol className="list-decimal list-inside space-y-1">
-          <li>בחר מוצר מהרשימה למטה</li>
-          <li>הזן מזהה הזמנה לבדיקה או השאר את ברירת המחדל</li>
-          <li>לחץ על "שלח webhook לבדיקה" כדי לשלוח webhook לכל ה-URLs המוגדרים</li>
-          <li>צפה בתוצאות בלוג למטה</li>
-        </ol>
-      </div>
-      
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">בדיקת מערכת</h2>
-        <button
-          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          onClick={checkSystem}
-          disabled={isLoading}
-        >
-          בדוק תקינות מערכת
-        </button>
-      </div>
-      
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">שליחת Webhook לבדיקה</h2>
+      <div className="bg-white rounded-lg shadow p-4 mb-4">
+        <h2 className="text-xl font-semibold mb-2">בחר מוצר לבדיקה</h2>
         
         <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2">
-            בחר מוצר
-          </label>
-          <select
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          <label className="block text-gray-700 mb-2">מוצר:</label>
+          <select 
+            className="w-full p-2 border rounded"
             value={selectedProduct}
             onChange={(e) => setSelectedProduct(e.target.value)}
-            disabled={isLoading}
           >
-            <option value="">-- בחר מוצר --</option>
+            <option value="">בחר מוצר...</option>
             {products.map(product => (
               <option key={product.id} value={product.id}>
-                {product.name} - {product.price} ש"ח
+                {product.name} ({product.price} ₪)
               </option>
             ))}
           </select>
         </div>
         
         <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2">
-            מזהה הזמנה לבדיקה
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            type="text"
+          <label className="block text-gray-700 mb-2">מזהה הזמנה לבדיקה:</label>
+          <input 
+            type="text" 
+            className="w-full p-2 border rounded"
             value={testOrderId}
             onChange={(e) => setTestOrderId(e.target.value)}
-            placeholder="מזהה הזמנה"
-            disabled={isLoading}
           />
-          <p className="text-xs text-gray-500 mt-1">השאר ריק כדי ליצור מזהה אקראי</p>
+          <p className="text-sm text-gray-500 mt-1">מזהה זה ישמש לזיהוי ההזמנה בלוגים ובמערכת</p>
         </div>
         
-        <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2">
-            URL ישיר (אופציונלי)
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            type="text"
-            value={directUrl}
-            onChange={(e) => setDirectUrl(e.target.value)}
-            placeholder="https://example.com/webhook"
-            disabled={isLoading}
+        <div className="flex items-center mb-4">
+          <input 
+            type="checkbox" 
+            id="showAdvanced" 
+            className="mr-2"
+            checked={showAdvancedOptions}
+            onChange={() => setShowAdvancedOptions(!showAdvancedOptions)}
           />
-          <p className="text-xs text-gray-500 mt-1">אם תזין URL ישיר, ה-webhook יישלח אליו במקום או בנוסף ל-URLs המוגדרים</p>
+          <label htmlFor="showAdvanced" className="text-gray-700">הצג אפשרויות מתקדמות</label>
         </div>
         
-        <div className="mb-4">
-          <button
-            className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-            onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-            disabled={isLoading}
-          >
-            {showAdvancedOptions ? 'הסתר אפשרויות מתקדמות' : 'הצג אפשרויות מתקדמות'}
-          </button>
-          
-          {showAdvancedOptions && (
-            <div className="mt-3">
-              <label className="block text-gray-700 text-sm font-bold mb-2">
-                Payload מותאם אישית (JSON)
-              </label>
-              <textarea
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-48 font-mono"
+        {showAdvancedOptions && (
+          <div className="bg-gray-50 p-3 rounded mb-4">
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">URL ישיר (לשליחה ישירה):</label>
+              <input 
+                type="text" 
+                className="w-full p-2 border rounded"
+                value={directUrl}
+                onChange={(e) => setDirectUrl(e.target.value)}
+                placeholder="https://example.com/webhook"
+              />
+              <p className="text-sm text-gray-500 mt-1">אם תזין URL כאן, הבקשה תישלח ישירות אליו במקום דרך מערכת ה-webhooks</p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">פיילוד מותאם אישית (JSON):</label>
+              <textarea 
+                className="w-full p-2 border rounded font-mono text-sm h-32"
                 value={customPayload}
                 onChange={(e) => setCustomPayload(e.target.value)}
-                placeholder={`{
-  "event": "product_purchased",
-  "order_id": "${testOrderId}",
-  "product_id": "${selectedProduct || '[product_id]'}",
-  "business_id": "${businessId || '[business_id]'}",
-  "timestamp": "${new Date().toISOString()}",
-  
-  "product": {
-    "id": "${selectedProduct || '[product_id]'}",
-    "name": "שם המוצר",
-    "price": 100,
-    "sku": "SKU123",
-    "currency": "ILS"
-  },
-  
-  "order": {
-    "id": "${testOrderId}",
-    "total_amount": 100,
-    "status": "pending",
-    "created_at": "${new Date().toISOString()}"
-  },
-  
-  "order_item": {
-    "quantity": 1,
-    "price_at_time": 100
-  },
-  
-  "customer": {
-    "id": "customer-123",
-    "name": "ישראל ישראלי",
-    "email": "israel@example.com",
-    "phone": "0501234567",
-    "contact_id": "contact-123"
-  }
-}`}
-                disabled={isLoading}
+                placeholder='{"order_id": "test-123", "product": {"id": "prod-123", "name": "Test Product"}}'
               />
-              <p className="text-xs text-gray-500 mt-1">השאר ריק כדי להשתמש ב-payload ברירת המחדל</p>
+              <p className="text-sm text-gray-500 mt-1">אם תזין JSON כאן, הוא יישלח במקום הפיילוד הרגיל</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
         
-        <div className="flex flex-col space-y-4 mt-4">
-          <button
+        <div className="flex space-x-2 rtl:space-x-reverse">
+          <button 
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
             onClick={handleTestWebhook}
             disabled={isLoading || (!selectedProduct && !directUrl)}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {isLoading ? 'שולח...' : 'שלח Webhook'}
           </button>
           
-          <button
-            onClick={handleTestWebhookViaEdge}
-            disabled={isLoading}
-            className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            שלח Webhook באמצעות Edge Function
-          </button>
-          
-          <button
+          <button 
+            className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 disabled:opacity-50"
             onClick={checkSystem}
             disabled={isLoading}
-            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             בדוק מערכת
           </button>
           
-          <button
-            className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          <button 
+            className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
             onClick={clearLogs}
-            disabled={isLoading}
           >
             נקה לוגים
           </button>
         </div>
       </div>
       
-      <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-xl font-bold mb-4">לוג בדיקה</h2>
-        <div className="bg-gray-100 p-4 rounded-lg h-64 overflow-y-auto text-sm font-mono">
+      {/* תוצאות */}
+      {webhookResponses.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4 mb-4">
+          <h2 className="text-xl font-semibold mb-2">תוצאות</h2>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border">
+              <thead>
+                <tr>
+                  <th className="py-2 px-4 border">URL</th>
+                  <th className="py-2 px-4 border">סטטוס</th>
+                  <th className="py-2 px-4 border">תגובה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {webhookResponses.map((response, index) => (
+                  <tr key={index} className={response.error ? 'bg-red-50' : 'bg-green-50'}>
+                    <td className="py-2 px-4 border text-sm break-all">{response.url}</td>
+                    <td className="py-2 px-4 border text-center">
+                      {response.status ? (
+                        <span className={`font-mono ${response.status >= 200 && response.status < 300 ? 'text-green-600' : 'text-red-600'}`}>
+                          {response.status}
+                        </span>
+                      ) : (
+                        <span className="text-red-600">שגיאה</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-4 border text-sm">
+                      {response.error ? (
+                        <div className="text-red-600">{response.error}</div>
+                      ) : (
+                        <div className="font-mono text-xs break-all max-h-20 overflow-y-auto">
+                          {typeof response.response === 'object' 
+                            ? JSON.stringify(response.response, null, 2) 
+                            : response.response}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      {/* לוגים */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h2 className="text-xl font-semibold mb-2">לוגים</h2>
+        
+        <div className="bg-gray-900 text-gray-100 p-4 rounded font-mono text-sm h-64 overflow-y-auto">
           {logs.length === 0 ? (
-            <p className="text-gray-500">אין לוגים להצגה...</p>
+            <div className="text-gray-500">אין לוגים להצגה</div>
           ) : (
             logs.map((log, index) => (
-              <div key={index} className="mb-1">
-                {log}
-              </div>
+              <div key={index} className="mb-1">{log}</div>
             ))
           )}
         </div>
-        
-        {webhookResponses.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-lg font-bold mb-3">תגובות Webhook</h3>
-            <div className="space-y-4">
-              {webhookResponses.map((resp, index) => (
-                <div key={index} className="border rounded p-3">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="font-medium">{resp.url}</span>
-                    {resp.status ? (
-                      <span className={`px-2 py-1 rounded text-xs ${resp.status >= 200 && resp.status < 300 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {resp.status}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">שגיאה</span>
-                    )}
-                  </div>
-                  
-                  {resp.error ? (
-                    <div className="bg-red-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      {resp.error}
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 p-2 rounded text-xs font-mono overflow-x-auto">
-                      {typeof resp.response === 'object' 
-                        ? JSON.stringify(resp.response, null, 2)
-                        : String(resp.response)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+      
+      {isTableValid === false && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded mt-4">
+          <h3 className="font-bold mb-2">שגיאה בטבלת Webhooks</h3>
+          <p>נראה שיש בעיה במבנה טבלת ה-Webhooks. יש לוודא שהטבלה כוללת את העמודות הבאות:</p>
+          <ul className="list-disc list-inside mt-2">
+            <li>id (UUID, Primary Key)</li>
+            <li>business_id (UUID, Foreign Key)</li>
+            <li>url (Text)</li>
+            <li>on_order_created (Boolean)</li>
+            <li>on_order_paid (Boolean)</li>
+            <li>on_product_purchased (Boolean)</li>
+            <li>product_id (UUID, יכול להיות null)</li>
+            <li>created_at (Timestamp)</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
