@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Mail, FileText, Edit2, ShoppingBag, CreditCard, MoreVertical, Package, Clock, DollarSign } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import * as Icons from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import QuoteGenerator from './QuoteGenerator';
 import PaymentOptionsModal from './PaymentOptionsModal';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CustomerDetailsProps {
   customer: {
@@ -228,14 +229,14 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
               onClick={handleCreateQuote}
               className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
             >
-              <FileText className="w-5 h-5" />
+              <Icons.FileText className="w-5 h-5" />
               <span>צור הצעת מחיר מהזמנות שנבחרו</span>
             </button>
             <button
               onClick={handlePayment}
               className="flex items-center space-x-2 text-green-600 hover:text-green-700"
             >
-              <CreditCard className="w-5 h-5" />
+              <Icons.CreditCard className="w-5 h-5" />
               <span>תשלום להזמנות שנבחרו</span>
             </button>
           </div>
@@ -319,7 +320,7 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
                 rel="noopener noreferrer"
                 className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
-                <FileText className="w-4 h-4 ml-1" />
+                <Icons.FileText className="w-4 h-4 ml-1" />
                 חשבונית
               </a>
             )}
@@ -330,95 +331,156 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">פרטי לקוח</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <X className="w-5 h-5" />
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
+          <h2 className="text-xl font-bold">פרטי לקוח</h2>
+          <button 
+            onClick={onClose} 
+            className="text-white/80 hover:text-white hover:bg-white/20 rounded-full p-1.5 transition-colors"
+          >
+            <Icons.X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 bg-gray-50/50">
           <div className="space-y-6">
             {/* Customer Info */}
-            <div className="flex justify-between items-start">
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="flex justify-between items-start bg-white p-5 rounded-xl shadow-sm border border-gray-100"
+            >
               <div>
-                <h3 className="text-lg font-medium text-gray-900">{customer.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">מזהה איש קשר: {customer.contact_id}</p>
+                <h3 className="text-xl font-bold text-gray-900">{customer.name}</h3>
+                <div className="flex items-center mt-1.5">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <Icons.User className="w-3 h-3 mr-1" />
+                    מזהה: {customer.contact_id.substring(0, 8)}...
+                  </span>
+                  {customer.email && (
+                    <a href={`mailto:${customer.email}`} className="ml-2 text-sm text-gray-500 hover:text-gray-700 flex items-center">
+                      <Icons.Mail className="w-3.5 h-3.5 mr-1" />
+                      {customer.email}
+                    </a>
+                  )}
+                </div>
               </div>
               <div className="flex space-x-2">
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={onEdit}
-                  className="text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100"
+                  className="text-purple-600 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors"
                   title="ערוך פרטי לקוח"
                 >
-                  <Edit2 className="w-5 h-5" />
-                </button>
+                  <Icons.Edit className="w-5 h-5" />
+                </motion.button>
               </div>
-            </div>
+            </motion.div>
 
             {/* Customer Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Package className="w-5 h-5 text-blue-600" />
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4"
+            >
+              <motion.div 
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-xl shadow-sm border border-blue-200"
+              >
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <div className="p-2 bg-blue-500 bg-opacity-10 rounded-lg">
+                    <Icons.Package className="w-6 h-6 text-blue-600" />
+                  </div>
                   <div>
-                    <p className="text-sm text-gray-600">מוצרים שנרכשו</p>
-                    <p className="text-xl font-semibold text-gray-900">{stats.totalProducts}</p>
+                    <p className="text-sm font-medium text-blue-800">מוצרים שנרכשו</p>
+                    <p className="text-2xl font-bold text-blue-900">{stats.totalProducts}</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Clock className="w-5 h-5 text-yellow-600" />
+              <motion.div 
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                className="bg-gradient-to-br from-amber-50 to-amber-100 p-5 rounded-xl shadow-sm border border-amber-200"
+              >
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <div className="p-2 bg-amber-500 bg-opacity-10 rounded-lg">
+                    <Icons.Clock className="w-6 h-6 text-amber-600" />
+                  </div>
                   <div>
-                    <p className="text-sm text-gray-600">מוצרים בהמתנה</p>
-                    <p className="text-xl font-semibold text-gray-900">{stats.pendingProducts}</p>
+                    <p className="text-sm font-medium text-amber-800">מוצרים בהמתנה</p>
+                    <p className="text-2xl font-bold text-amber-900">{stats.pendingProducts}</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <DollarSign className="w-5 h-5 text-green-600" />
+              <motion.div 
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-xl shadow-sm border border-green-200"
+              >
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <div className="p-2 bg-green-500 bg-opacity-10 rounded-lg">
+                    <Icons.DollarSign className="w-6 h-6 text-green-600" />
+                  </div>
                   <div>
-                    <p className="text-sm text-gray-600">סה"כ רכישות</p>
-                    <p className="text-xl font-semibold text-gray-900">₪{stats.totalSpent.toFixed(2)}</p>
+                    <p className="text-sm font-medium text-green-800">סה"כ רכישות</p>
+                    <p className="text-2xl font-bold text-green-900">₪{stats.totalSpent.toFixed(2)}</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="bg-red-50 p-4 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Clock className="w-5 h-5 text-red-600" />
+              <motion.div 
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                className="bg-gradient-to-br from-rose-50 to-rose-100 p-5 rounded-xl shadow-sm border border-rose-200"
+              >
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <div className="p-2 bg-rose-500 bg-opacity-10 rounded-lg">
+                    <Icons.Clock className="w-6 h-6 text-rose-600" />
+                  </div>
                   <div>
-                    <p className="text-sm text-gray-600">בהמתנה לתשלום</p>
-                    <p className="text-xl font-semibold text-gray-900">₪{stats.pendingAmount.toFixed(2)}</p>
+                    <p className="text-sm font-medium text-rose-800">בהמתנה לתשלום</p>
+                    <p className="text-2xl font-bold text-rose-900">₪{stats.pendingAmount.toFixed(2)}</p>
                   </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-4">
-              <button
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="grid grid-cols-2 gap-4"
+            >
+              <motion.button
+                whileHover={{ scale: 1.03, boxShadow: "0 10px 15px -3px rgba(59, 130, 246, 0.1), 0 4px 6px -2px rgba(59, 130, 246, 0.05)" }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setShowQuoteGenerator(true)}
-                className="flex items-center justify-center space-x-2 text-blue-600 hover:text-blue-700 p-4 border border-blue-200 rounded-lg hover:bg-blue-50"
+                className="flex items-center justify-center space-x-2 rtl:space-x-reverse bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white p-4 rounded-xl shadow-md transition-all duration-200"
               >
-                <FileText className="w-5 h-5" />
-                <span>צור הצעת מחיר</span>
-              </button>
+                <Icons.FileText className="w-5 h-5" />
+                <span className="font-medium">צור הצעת מחיר</span>
+              </motion.button>
               
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03, boxShadow: "0 10px 15px -3px rgba(16, 185, 129, 0.1), 0 4px 6px -2px rgba(16, 185, 129, 0.05)" }}
+                whileTap={{ scale: 0.97 }}
                 onClick={onAddProducts}
-                className="flex items-center justify-center space-x-2 text-green-600 hover:text-green-700 p-4 border border-green-200 rounded-lg hover:bg-green-50"
+                className="flex items-center justify-center space-x-2 rtl:space-x-reverse bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white p-4 rounded-xl shadow-md transition-all duration-200"
               >
-                <ShoppingBag className="w-5 h-5" />
-                <span>הוסף מוצרים</span>
-              </button>
-            </div>
+                <Icons.ShoppingBag className="w-5 h-5" />
+                <span className="font-medium">הוסף מוצרים</span>
+              </motion.button>
+            </motion.div>
 
             {/* Orders */}
             {orders.length > 0 && (
@@ -433,14 +495,14 @@ export default function CustomerDetails({ customer, onClose, onEdit, onAddProduc
                   href={`mailto:${customer.email}`}
                   className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100 inline-flex"
                 >
-                  <Mail className="w-5 h-5" />
+                  <Icons.Mail className="w-5 h-5" />
                   <span>{customer.email}</span>
                 </a>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Modals */}
       {showQuoteGenerator && (

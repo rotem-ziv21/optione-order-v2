@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, CreditCard, Building2, Banknote, Receipt, Check, UserCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import * as Icons from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { createPaymentPage } from '../lib/cardcom';
 import { addContactNote } from '../lib/crm-api';
 import { getTeamByBusinessId } from '../api/teamApi';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface StaffMember {
   id: string;
@@ -257,9 +258,7 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
           .from('order_items')
           .select(`
             quantity,
-            products (
-              name
-            )
+            products (name)
           `)
           .eq('order_id', order.id);
 
@@ -273,8 +272,8 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
         }
 
         // Create note for CRM
-        const itemsList = orderItems?.map(item => 
-          `${item.products.name} (${item.quantity})`
+        const itemsList = orderItems?.map((item: any) => 
+          `${item.products?.name || 'מוצר'} (${item.quantity})`
         ).join(', ');
 
         const noteBody = `✅ תשלום התקבל\n` +
@@ -316,52 +315,86 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">אפשרויות תשלום</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-500 to-indigo-600 text-white">
+          <h2 className="text-xl font-bold">אפשרויות תשלום</h2>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose} 
+            className="text-white/80 hover:text-white hover:bg-white/20 rounded-full p-1.5 transition-colors"
+          >
+            <Icons.X className="w-5 h-5" />
+          </motion.button>
         </div>
 
-        <div className="p-6">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-              {error}
-            </div>
-          )}
+        <div className="p-6 space-y-6">
+          <AnimatePresence>
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-4 p-4 bg-red-50 border-r-4 border-red-500 rounded-lg text-red-600 text-sm flex items-center"
+              >
+                <Icons.AlertCircle className="w-5 h-5 ml-2 flex-shrink-0" />
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="mb-4">
-            <h3 className="text-lg font-medium text-gray-900">סיכום הזמנות</h3>
-            <div className="mt-2 space-y-2">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center mb-3">
+              <Icons.FileText className="w-5 h-5 ml-2 text-purple-500" />
+              סיכום הזמנות
+            </h3>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3 shadow-sm">
               {orders.map((order) => (
-                <div key={order.id} className="flex justify-between text-sm">
-                  <span className="text-gray-600">הזמנה #{order.id.slice(0, 8)}</span>
-                  <span className="font-medium">{currency} {order.total_amount.toFixed(2)}</span>
-                </div>
+                <motion.div 
+                  key={order.id} 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-between text-sm bg-white p-3 rounded-lg shadow-sm border border-gray-100"
+                >
+                  <span className="text-gray-600 flex items-center">
+                    <Icons.ShoppingBag className="w-4 h-4 ml-1.5 text-indigo-400" />
+                    הזמנה #{order.id.slice(0, 8)}
+                  </span>
+                  <span className="font-medium text-indigo-600">{currency} {order.total_amount.toFixed(2)}</span>
+                </motion.div>
               ))}
-              <div className="pt-2 border-t border-gray-200 flex justify-between font-medium">
-                <span>סה"כ לתשלום:</span>
-                <span>{currency} {totalAmount.toFixed(2)}</span>
+              <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between font-bold text-lg">
+                <span className="flex items-center">
+                  <Icons.Receipt className="w-5 h-5 ml-2 text-purple-600" />
+                  סה"כ לתשלום:
+                </span>
+                <span className="text-indigo-700">{currency} {totalAmount.toFixed(2)}</span>
               </div>
             </div>
           </div>
 
           {/* Staff selection */}
           {staffMembers.length > 0 && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                <Icons.Users className="w-5 h-5 ml-2 text-purple-500" />
                 שייך מכירה לאיש צוות
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <UserCircle className="h-5 w-5 text-gray-400" />
+                  <Icons.UserCircle className="h-5 w-5 text-purple-400" />
                 </div>
                 <select
                   value={selectedStaffId}
                   onChange={(e) => setSelectedStaffId(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 pr-10 focus:border-blue-500 focus:ring-blue-500"
+                  className="block w-full rounded-lg border-gray-300 pr-10 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 shadow-sm bg-white/50 py-2.5"
                 >
                   <option value="">בחר איש צוות</option>
                   {staffMembers.map((staff) => (
@@ -375,15 +408,16 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
           )}
 
           {!showManualPayment ? (
-            <div className="space-y-4">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="space-y-5">
+              <div className="mb-5">
+                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                  <Icons.CreditCard className="w-5 h-5 ml-2 text-purple-500" />
                   מספר תשלומים
                 </label>
                 <select
                   value={payments}
                   onChange={(e) => setPayments(parseInt(e.target.value))}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 bg-white/50 py-2.5"
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
                     <option key={num} value={num}>{num} תשלומים</option>
@@ -391,80 +425,114 @@ export default function PaymentOptionsModal({ customer, orders, onClose, onSucce
                 </select>
               </div>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleCardcomPayment}
                 disabled={loading}
-                className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between"
+                className="w-full p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl shadow-md hover:shadow-lg flex items-center justify-between transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <div className="flex items-center space-x-3">
-                  <CreditCard className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium">כרטיס אשראי</span>
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <Icons.CreditCard className="w-5 h-5 text-white" />
+                  <span className="font-bold">כרטיס אשראי</span>
                 </div>
-                <span className="text-sm text-gray-500">Cardcom</span>
-              </button>
+                <span className="text-sm bg-white/20 px-2 py-1 rounded-lg">Cardcom</span>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setShowManualPayment(true)}
-                className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-between"
+                className="w-full p-4 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-xl shadow-md hover:shadow-lg flex items-center justify-between transition-all duration-200"
               >
-                <div className="flex items-center space-x-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  <span className="font-medium">תשלום ידני</span>
+                <div className="flex items-center space-x-3 rtl:space-x-reverse">
+                  <Icons.Check className="w-5 h-5 text-white" />
+                  <span className="font-bold">תשלום ידני</span>
                 </div>
-                <span className="text-sm text-gray-500">העברה / מזומן / צ'ק</span>
-              </button>
+                <span className="text-sm bg-white/20 px-2 py-1 rounded-lg">העברה / מזומן / צ'ק</span>
+              </motion.button>
             </div>
           ) : (
-            <div className="space-y-4">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-5"
+            >
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                  <Icons.Wallet className="w-5 h-5 ml-2 text-purple-500" />
                   אמצעי תשלום
                 </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="">בחר אמצעי תשלום</option>
-                  <option value="bank_transfer">העברה בנקאית</option>
-                  <option value="cash">מזומן</option>
-                  <option value="check">צ'ק</option>
-                  <option value="invoice">כנגד חשבונית</option>
-                </select>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <Icons.CreditCard className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="block w-full rounded-lg border-gray-300 pr-10 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 bg-white/50 py-2.5"
+                  >
+                    <option value="">בחר אמצעי תשלום</option>
+                    <option value="bank_transfer">העברה בנקאית</option>
+                    <option value="cash">מזומן</option>
+                    <option value="check">צ'ק</option>
+                    <option value="invoice">כנגד חשבונית</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                  <Icons.FileText className="w-5 h-5 ml-2 text-purple-500" />
                   אסמכתא
                 </label>
-                <input
-                  type="text"
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  placeholder="מספר העברה / צ'ק / חשבונית"
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <Icons.Hash className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <input
+                    type="text"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="מספר העברה / צ'ק / חשבונית"
+                    className="block w-full rounded-lg border-gray-300 pr-10 shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 bg-white/50 py-2.5"
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
+              <div className="flex justify-end space-x-3 rtl:space-x-reverse pt-6">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => setShowManualPayment(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
                 >
                   חזור
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handleManualPayment}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 border border-transparent rounded-lg shadow-sm hover:from-purple-700 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
                 >
-                  {loading ? 'מעדכן...' : 'עדכן תשלום'}
-                </button>
+                  {loading ? (
+                    <span className="inline-flex items-center">
+                      <Icons.Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                      מעדכן...
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center">
+                      <Icons.CheckCircle className="w-4 h-4 ml-2" />
+                      עדכן תשלום
+                    </span>
+                  )}
+                </motion.button>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
