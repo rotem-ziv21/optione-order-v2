@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, UserPlus, ShoppingBag, Users, UserCheck, CreditCard, Tag, Filter, RefreshCw, Download, X, Edit, Eye } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, UserPlus, ShoppingBag, Users, UserCheck, CreditCard, Tag, RefreshCw, Download, X, Edit, Eye } from 'lucide-react';
 import CustomerProductForm from '../components/CustomerProductForm';
 import CustomerSearch from '../components/CustomerSearch';
 import CustomerDetails from '../components/CustomerDetails';
@@ -8,6 +8,7 @@ import OrderStatusUpdate from '../components/OrderStatusUpdate';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import { useCardcomCallback } from '../hooks/useCardcomCallback';
+import CustomerFilter, { CustomerFilterCriteria } from '../components/CustomerFilter';
 
 interface Product {
   id: string;
@@ -49,6 +50,7 @@ export default function Customers() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showProductForm, setShowProductForm] = useState(false);
+  const [customerFilters, setCustomerFilters] = useState<CustomerFilterCriteria>({});
   const [showSearch, setShowSearch] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -173,25 +175,35 @@ export default function Customers() {
       if (itemsError) throw itemsError;
 
       const ordersByCustomer: Record<string, CustomerOrder[]> = {};
-      orders?.forEach(order => {
-        const items = orderItems
-          ?.filter(item => item.order_id === order.id)
-          .map(item => ({
-            product_name: item.products ? item.products.name : 'Unknown Product',
-            quantity: item.quantity,
-            price_at_time: item.price_at_time,
-            currency: item.currency
-          }));
+    
+    // Debug: Log all orders
+    console.log('All orders:', orders);
+    
+    orders?.forEach(order => {
+      const items = orderItems
+        ?.filter(item => item.order_id === order.id)
+        .map(item => ({
+          product_name: item.products && typeof item.products === 'object' && 'name' in item.products ? String(item.products.name) : 'Unknown Product',
+          quantity: item.quantity,
+          price_at_time: item.price_at_time,
+          currency: item.currency
+        }));
 
-        if (!ordersByCustomer[order.customer_id]) {
-          ordersByCustomer[order.customer_id] = [];
-        }
+      // Store orders by both customer_id and contact_id to ensure we catch all
+      const customerId = order.customer_id;
+      
+      if (!ordersByCustomer[customerId]) {
+        ordersByCustomer[customerId] = [];
+      }
 
-        ordersByCustomer[order.customer_id].push({
-          ...order,
-          items: items || []
-        });
+      ordersByCustomer[customerId].push({
+        ...order,
+        items: items || []
       });
+    });
+    
+    // Debug: Log the organized orders
+    console.log('Orders by customer:', ordersByCustomer);
 
       setCustomerOrders(ordersByCustomer);
     } catch (error) {
@@ -266,6 +278,7 @@ export default function Customers() {
         return order.status;
       }
     }
+    console.log(`Order ${orderId} not found`);
     return 'pending'; // Default status if not found
   };
 
@@ -274,18 +287,106 @@ export default function Customers() {
     setShowDetails(true);
   };
 
-  // Filter customers based on search term
-  const filteredCustomers = customers.filter(customer => {
-    if (!searchTerm) return true;
+  // Calculate customer total order amounts for filtering
+  const customerTotalAmounts = useMemo(() => {
+    const amounts: Record<string, number> = {};
     
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (customer.name?.toLowerCase().includes(searchLower) || false) ||
-      (customer.email?.toLowerCase().includes(searchLower) || false) ||
-      (customer.contact_id?.toLowerCase().includes(searchLower) || false)
-    );
-  });
+    // Initialize amounts for all customers to 0
+    customers.forEach(customer => {
+      // Use contact_id as the key since that's what we use to store orders
+      amounts[customer.contact_id] = 0;
+    });
+    
+    // Sum order amounts for each customer
+    customers.forEach(customer => {
+      const customerId = customer.contact_id;
+      const allOrders = customerOrders[customerId] || [];
+      
+      console.log(`Processing customer ${customer.name} (${customerId}) with ${allOrders.length} orders`);
+      
+      // Sum up all order amounts
+      let totalAmount = 0;
+      allOrders.forEach(order => {
+        // Make sure we're dealing with numbers
+        if (order.total_amount !== null && order.total_amount !== undefined) {
+          // Force conversion to number
+          const amount = typeof order.total_amount === 'string' ? 
+            parseFloat(order.total_amount) : Number(order.total_amount);
+          
+          if (!isNaN(amount)) {
+            totalAmount += amount;
+            console.log(`Adding ${amount} to total for customer ${customer.name}`);
+          }
+        }
+      });
+      
+      // Store the total amount using contact_id
+      amounts[customerId] = totalAmount;
+      console.log(`Customer ${customer.name} (${customerId}) final total amount: ${totalAmount}`);
+    });
+    
+    // Log all customer amounts for debugging
+    console.log('All customer amounts:', amounts);
+    
+    return amounts;
+  }, [customerOrders, customers]);
 
+  // Filter customers based on search term and order amount filters
+  const filteredCustomers = useMemo(() => {
+    console.log('Filtering customers with filters:', customerFilters);
+    
+    return customers.filter(customer => {
+      // Filter by search term
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        (customer.name?.toLowerCase().includes(searchLower) || false) || 
+        (customer.email?.toLowerCase().includes(searchLower) || false) || 
+        (customer.contact_id?.toLowerCase().includes(searchLower) || false);
+      
+      if (!matchesSearch) return false;
+      
+      // Get the total amount for this customer using contact_id
+      const totalAmount = customerTotalAmounts[customer.contact_id] || 0;
+      console.log(`Customer ${customer.name} (${customer.contact_id}) has total amount: ${totalAmount}`);
+      
+      // Apply filters
+      if (customerFilters.totalAmountGreaterThan !== undefined) {
+        const greaterThanValue = Number(customerFilters.totalAmountGreaterThan);
+        console.log(`Checking if ${customer.name}'s total (${totalAmount}) > ${greaterThanValue}`);
+        
+        // לקוח יוצג רק אם הסכום שלו גדול מהערך שהוזן
+        if (totalAmount <= greaterThanValue) {
+          console.log(`${customer.name} filtered out: ${totalAmount} is NOT greater than ${greaterThanValue}`);
+          return false;
+        }
+        console.log(`${customer.name} passes greater than filter: ${totalAmount} > ${greaterThanValue}`);
+      }
+      
+      if (customerFilters.totalAmountLessThan !== undefined) {
+        const lessThanValue = Number(customerFilters.totalAmountLessThan);
+        if (totalAmount >= lessThanValue) {
+          console.log(`${customer.name} filtered out: ${totalAmount} is NOT less than ${lessThanValue}`);
+          return false;
+        }
+        console.log(`${customer.name} passes less than filter: ${totalAmount} < ${lessThanValue}`);
+      }
+      
+      if (customerFilters.totalAmountEqualTo !== undefined) {
+        const equalToValue = Number(customerFilters.totalAmountEqualTo);
+        if (totalAmount !== equalToValue) {
+          console.log(`${customer.name} filtered out: ${totalAmount} is NOT equal to ${equalToValue}`);
+          return false;
+        }
+        console.log(`${customer.name} passes equal to filter: ${totalAmount} = ${equalToValue}`);
+      }
+      
+      // Customer passed all filters
+      console.log(`${customer.name} passed all filters`);
+      return true;
+    });
+  }, [customers, searchTerm, customerTotalAmounts, customerFilters]);
+
+// ...
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -397,9 +498,10 @@ export default function Customers() {
         </div>
 
         <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
-          <button className="text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2.5 rounded-lg transition-colors">
-            <Filter className="w-5 h-5" />
-          </button>
+          <CustomerFilter 
+            onFilterChange={setCustomerFilters} 
+            activeFilters={customerFilters} 
+          />
           <button 
             onClick={() => {
               fetchCustomers();
